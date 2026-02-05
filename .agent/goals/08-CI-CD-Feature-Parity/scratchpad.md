@@ -76,7 +76,7 @@ Rationale:
 | 05 | Verify Branch Protection Rules | 🟢 Complete | High |
 | 06 | Implement Crons API | ⚪ Not Started | Medium |
 | 07 | Implement A2A Protocol | ⚪ Not Started | Medium |
-| 08 | Implement MCP Protocol | ⚪ Not Started | Medium |
+| 08 | Implement MCP Protocol | 🟢 Complete | Medium |
 | 09 | Documentation & Cleanup | ⚪ Not Started | Medium |
 
 ---
@@ -103,6 +103,26 @@ Rationale:
 **Docker Images Published to GHCR:**
 - `ghcr.io/l4b4r4b4b4/oap-langgraph-tools-agent:latest`
 - `ghcr.io/l4b4r4b4b4/oap-langgraph-tools-agent-robyn:latest`
+
+### PR #2 Merged (2026-02-05)
+
+**MCP Protocol Implementation:**
+- `POST /mcp/` - JSON-RPC 2.0 message handler
+- `GET /mcp/` - Returns 405 (streaming not supported)
+- `DELETE /mcp/` - Returns 404 (stateless, no sessions)
+
+**MCP Methods Supported:**
+- `initialize` - Client handshake with capabilities
+- `tools/list` - Returns `langgraph_agent` tool
+- `tools/call` - Execute agent with message
+- `ping` - Health check
+
+**Files Created:**
+- `robyn_server/mcp/` - MCP module (schemas, handlers)
+- `robyn_server/routes/mcp.py` - HTTP route handlers
+- `robyn_server/tests/test_mcp.py` - 30 tests
+
+**Updated `/info` endpoint:** `capabilities.mcp = true`
 
 ---
 
@@ -367,9 +387,9 @@ jobs:
 ### Feature Parity (Tasks 06-08)
 - [ ] Crons API endpoints implemented and tested
 - [ ] A2A Protocol endpoints implemented and tested
-- [ ] MCP Protocol endpoints implemented and tested
-- [ ] OpenAPI spec updated to include all new endpoints
-- [ ] Test coverage maintained at ≥73%
+- [x] MCP Protocol endpoints implemented and tested (PR #2)
+- [x] OpenAPI spec updated to include all new endpoints
+- [x] Test coverage maintained at ≥73% (298 tests passing)
 
 ---
 
