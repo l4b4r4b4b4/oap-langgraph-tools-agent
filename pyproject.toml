@@ -20,6 +20,8 @@ dependencies = [
     "deepagents>=0.3.9",
     "tavily-python>=0.7.20",
     "robyn>=0.76.0",
+    "apscheduler>=3.11.2",
+    "croniter>=6.0.0",
 ]
 
 [build-system]

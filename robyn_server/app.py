@@ -18,10 +18,12 @@ from robyn_server.openapi_spec import (
 )
 from robyn_server.routes import (
     register_assistant_routes,
+    register_cron_routes,
     register_run_routes,
     register_stream_routes,
     register_thread_routes,
 )
+from robyn_server.routes.a2a import register_a2a_routes
 from robyn_server.routes.mcp import register_mcp_routes
 from robyn_server.routes.metrics import register_metrics_routes
 from robyn_server.routes.store import register_store_routes
@@ -57,6 +59,8 @@ register_stream_routes(app)
 register_metrics_routes(app)
 register_store_routes(app)
 register_mcp_routes(app)
+register_cron_routes(app)
+register_a2a_routes(app)
 
 
 # ============================================================================
@@ -147,8 +151,8 @@ async def info() -> dict:
         "capabilities": {
             "streaming": True,  # SSE streaming supported
             "store": True,  # Store API supported
-            "crons": False,  # Cron jobs not yet implemented
-            "a2a": False,  # Agent-to-Agent not yet implemented
+            "crons": True,  # Cron jobs (scheduled runs) implemented
+            "a2a": True,  # Agent-to-Agent protocol implemented
             "mcp": True,  # MCP endpoints implemented
             "metrics": True,  # Prometheus metrics available
         },
@@ -165,7 +169,7 @@ async def info() -> dict:
         "tiers": {
             "tier1": True,  # Core CRUD + Streaming
             "tier2": True,  # Search/Count/List
-            "tier3": "partial",  # Metrics + Store (Crons/A2A/MCP pending)
+            "tier3": True,  # Metrics + Store + Crons + A2A + MCP
         },
     }
 

@@ -49,6 +49,14 @@ TAGS = [
         "name": "MCP",
         "description": "Model Context Protocol endpoints. Exposes the LangGraph agent as an MCP server for external clients.",
     },
+    {
+        "name": "A2A",
+        "description": "Agent-to-Agent Protocol endpoints. Enables inter-agent communication using JSON-RPC 2.0 over HTTP.",
+    },
+    {
+        "name": "Crons",
+        "description": "Cron endpoints for scheduling recurring runs. Allows creation of scheduled jobs that execute on a cron schedule.",
+    },
 ]
 
 # Reusable schema components
@@ -1036,6 +1044,255 @@ COMPONENTS: dict[str, Any] = {
                     "items": {"$ref": "#/components/schemas/Item"},
                 }
             },
+        },
+        # Cron schemas
+        "Cron": {
+            "type": "object",
+            "required": [
+                "cron_id",
+                "thread_id",
+                "schedule",
+                "created_at",
+                "updated_at",
+                "payload",
+            ],
+            "properties": {
+                "cron_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "title": "Cron Id",
+                    "description": "The ID of the cron.",
+                },
+                "assistant_id": {
+                    "type": ["string", "null"],
+                    "format": "uuid",
+                    "title": "Assistant Id",
+                    "description": "The ID of the assistant.",
+                },
+                "thread_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "title": "Thread Id",
+                    "description": "The ID of the thread.",
+                },
+                "end_time": {
+                    "type": ["string", "null"],
+                    "format": "date-time",
+                    "title": "End Time",
+                    "description": "The end date to stop running the cron.",
+                },
+                "schedule": {
+                    "type": "string",
+                    "title": "Schedule",
+                    "description": "The schedule to run, cron format.",
+                },
+                "created_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "title": "Created At",
+                    "description": "The time the cron was created.",
+                },
+                "updated_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "title": "Updated At",
+                    "description": "The last time the cron was updated.",
+                },
+                "user_id": {
+                    "type": ["string", "null"],
+                    "title": "User Id",
+                    "description": "The ID of the user.",
+                },
+                "payload": {
+                    "type": "object",
+                    "title": "Payload",
+                    "description": "The run payload to use for creating new run.",
+                },
+                "next_run_date": {
+                    "type": ["string", "null"],
+                    "format": "date-time",
+                    "title": "Next Run Date",
+                    "description": "The next run date of the cron.",
+                },
+                "metadata": {
+                    "type": "object",
+                    "title": "Metadata",
+                    "description": "The cron metadata.",
+                },
+            },
+            "title": "Cron",
+            "description": "Represents a scheduled task.",
+        },
+        "CronCreate": {
+            "type": "object",
+            "required": ["assistant_id", "schedule"],
+            "properties": {
+                "schedule": {
+                    "type": "string",
+                    "title": "Schedule",
+                    "description": "The cron schedule to execute this job on.",
+                },
+                "end_time": {
+                    "type": ["string", "null"],
+                    "format": "date-time",
+                    "title": "End Time",
+                    "description": "The end date to stop running the cron.",
+                },
+                "assistant_id": {
+                    "type": "string",
+                    "title": "Assistant Id",
+                    "description": "The assistant ID or graph name to run.",
+                },
+                "input": {
+                    "anyOf": [
+                        {"items": {"type": "object"}, "type": "array"},
+                        {"type": "object"},
+                    ],
+                    "title": "Input",
+                    "description": "The input to the graph.",
+                },
+                "metadata": {
+                    "type": "object",
+                    "title": "Metadata",
+                    "description": "Metadata to assign to the cron job runs.",
+                },
+                "config": {
+                    "$ref": "#/components/schemas/Config",
+                },
+                "context": {
+                    "type": "object",
+                    "title": "Context",
+                    "description": "Static context added to the assistant.",
+                },
+                "webhook": {
+                    "type": "string",
+                    "format": "uri-reference",
+                    "title": "Webhook",
+                    "description": "Webhook to call after LangGraph API call is done.",
+                },
+                "interrupt_before": {
+                    "anyOf": [
+                        {"type": "string", "enum": ["*"]},
+                        {"items": {"type": "string"}, "type": "array"},
+                    ],
+                    "title": "Interrupt Before",
+                    "description": "Nodes to interrupt immediately before they get executed.",
+                },
+                "interrupt_after": {
+                    "anyOf": [
+                        {"type": "string", "enum": ["*"]},
+                        {"items": {"type": "string"}, "type": "array"},
+                    ],
+                    "title": "Interrupt After",
+                    "description": "Nodes to interrupt immediately after they get executed.",
+                },
+                "on_run_completed": {
+                    "type": "string",
+                    "enum": ["delete", "keep"],
+                    "default": "delete",
+                    "title": "On Run Completed",
+                    "description": "What to do with the thread after the run completes.",
+                },
+            },
+            "title": "CronCreate",
+            "description": "Payload for creating a stateless cron job.",
+        },
+        "CronSearch": {
+            "type": "object",
+            "properties": {
+                "assistant_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "title": "Assistant Id",
+                    "description": "The assistant ID to filter by.",
+                },
+                "thread_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "title": "Thread Id",
+                    "description": "The thread ID to search for.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "title": "Limit",
+                    "default": 10,
+                    "minimum": 1,
+                    "maximum": 1000,
+                    "description": "The maximum number of results to return.",
+                },
+                "offset": {
+                    "type": "integer",
+                    "title": "Offset",
+                    "default": 0,
+                    "minimum": 0,
+                    "description": "The number of results to skip.",
+                },
+                "sort_by": {
+                    "type": "string",
+                    "title": "Sort By",
+                    "default": "created_at",
+                    "enum": [
+                        "cron_id",
+                        "assistant_id",
+                        "thread_id",
+                        "next_run_date",
+                        "end_time",
+                        "created_at",
+                        "updated_at",
+                    ],
+                    "description": "The field to sort by.",
+                },
+                "sort_order": {
+                    "type": "string",
+                    "title": "Sort Order",
+                    "default": "desc",
+                    "enum": ["asc", "desc"],
+                    "description": "The order to sort by.",
+                },
+                "select": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "cron_id",
+                            "assistant_id",
+                            "thread_id",
+                            "on_run_completed",
+                            "end_time",
+                            "schedule",
+                            "created_at",
+                            "updated_at",
+                            "user_id",
+                            "payload",
+                            "next_run_date",
+                            "metadata",
+                        ],
+                    },
+                    "title": "Select",
+                    "description": "Specify which fields to return.",
+                },
+            },
+            "title": "CronSearch",
+            "description": "Payload for listing crons.",
+        },
+        "CronCountRequest": {
+            "type": "object",
+            "properties": {
+                "assistant_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "title": "Assistant Id",
+                    "description": "The assistant ID to search for.",
+                },
+                "thread_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "title": "Thread Id",
+                    "description": "The thread ID to search for.",
+                },
+            },
+            "title": "CronCountRequest",
+            "description": "Payload for counting crons.",
         },
         # System schemas
         "HealthResponse": {
@@ -2219,6 +2476,365 @@ Sends a JSON-RPC 2.0 message to the server.
             "operationId": "delete_mcp",
             "responses": {
                 "404": {"description": "Session not found (server is stateless)"}
+            },
+        },
+    },
+    # =========================================================================
+    # Crons (Scheduled Runs)
+    # =========================================================================
+    "/runs/crons": {
+        "post": {
+            "tags": ["Crons"],
+            "summary": "Create Cron",
+            "description": "Create a cron to schedule runs on new threads.",
+            "operationId": "create_cron_runs_crons_post",
+            "requestBody": {
+                "content": {
+                    "application/json": {
+                        "schema": {"$ref": "#/components/schemas/CronCreate"}
+                    }
+                },
+                "required": True,
+            },
+            "responses": {
+                "200": {
+                    "description": "Success",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/Cron"}
+                        }
+                    },
+                },
+                "404": {
+                    "description": "Not Found",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+                        }
+                    },
+                },
+                "422": {
+                    "description": "Validation Error",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+                        }
+                    },
+                },
+            },
+        },
+    },
+    "/runs/crons/search": {
+        "post": {
+            "tags": ["Crons"],
+            "summary": "Search Crons",
+            "description": "Search all active crons.",
+            "operationId": "search_crons_runs_crons_search_post",
+            "requestBody": {
+                "content": {
+                    "application/json": {
+                        "schema": {"$ref": "#/components/schemas/CronSearch"}
+                    }
+                },
+                "required": True,
+            },
+            "responses": {
+                "200": {
+                    "description": "Success",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "items": {"$ref": "#/components/schemas/Cron"},
+                                "type": "array",
+                                "title": "Response Search Crons",
+                            }
+                        }
+                    },
+                },
+                "422": {
+                    "description": "Validation Error",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+                        }
+                    },
+                },
+            },
+        },
+    },
+    "/runs/crons/count": {
+        "post": {
+            "tags": ["Crons"],
+            "summary": "Count Crons",
+            "description": "Get the count of crons matching the specified criteria.",
+            "operationId": "count_crons_runs_crons_count_post",
+            "requestBody": {
+                "content": {
+                    "application/json": {
+                        "schema": {"$ref": "#/components/schemas/CronCountRequest"}
+                    }
+                },
+                "required": True,
+            },
+            "responses": {
+                "200": {
+                    "description": "Success",
+                    "content": {
+                        "application/json": {
+                            "schema": {"type": "integer", "title": "Count"}
+                        }
+                    },
+                },
+                "404": {
+                    "description": "Not Found",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+                        }
+                    },
+                },
+                "422": {
+                    "description": "Validation Error",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+                        }
+                    },
+                },
+            },
+        },
+    },
+    "/runs/crons/{cron_id}": {
+        "delete": {
+            "tags": ["Crons"],
+            "summary": "Delete Cron",
+            "description": "Delete a cron by ID.",
+            "operationId": "delete_cron_runs_crons__cron_id__delete",
+            "parameters": [
+                {
+                    "required": True,
+                    "schema": {"type": "string", "format": "uuid", "title": "Cron Id"},
+                    "name": "cron_id",
+                    "in": "path",
+                }
+            ],
+            "responses": {
+                "200": {
+                    "description": "Success",
+                    "content": {"application/json": {"schema": {}}},
+                },
+                "404": {
+                    "description": "Not Found",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+                        }
+                    },
+                },
+                "422": {
+                    "description": "Validation Error",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+                        }
+                    },
+                },
+            },
+        },
+    },
+    # =========================================================================
+    # A2A (Agent-to-Agent Protocol)
+    # =========================================================================
+    "/a2a/{assistant_id}": {
+        "post": {
+            "tags": ["A2A"],
+            "summary": "A2A JSON-RPC",
+            "description": """Communicate with an assistant using the Agent-to-Agent (A2A) Protocol over JSON-RPC 2.0.
+This endpoint accepts a JSON-RPC envelope and dispatches based on `method`.
+
+**Supported Methods:**
+- `message/send`: Send a message and wait for the final Task result.
+- `message/stream`: Send a message and receive Server-Sent Events (SSE) JSON-RPC responses.
+- `tasks/get`: Fetch the current state of a Task by ID.
+- `tasks/cancel`: Request cancellation (currently not supported; returns an error).
+
+**LangGraph Mapping:**
+- `message.contextId` maps to LangGraph `thread_id`
+- `message.taskId` maps to LangGraph `run_id` (for resuming interrupted tasks)
+
+**Notes:**
+- Only `text` and `data` parts are supported; `file` parts are not.
+- If `message.contextId` is omitted, a new context is created.
+- Text parts require the assistant input schema to include a `messages` field.
+""",
+            "operationId": "post_a2a",
+            "parameters": [
+                {
+                    "name": "assistant_id",
+                    "in": "path",
+                    "required": True,
+                    "schema": {"type": "string", "format": "uuid"},
+                    "description": "The ID of the assistant to communicate with",
+                },
+                {
+                    "name": "Accept",
+                    "in": "header",
+                    "required": True,
+                    "schema": {"type": "string"},
+                    "description": "For `message/stream`, must include `text/event-stream`. For all other methods, use `application/json`.",
+                },
+            ],
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "jsonrpc": {
+                                    "type": "string",
+                                    "enum": ["2.0"],
+                                    "description": "JSON-RPC version",
+                                },
+                                "id": {
+                                    "type": "string",
+                                    "description": "Request identifier",
+                                },
+                                "method": {
+                                    "type": "string",
+                                    "enum": [
+                                        "message/send",
+                                        "message/stream",
+                                        "tasks/get",
+                                        "tasks/cancel",
+                                    ],
+                                    "description": "The method to invoke",
+                                },
+                                "params": {
+                                    "type": "object",
+                                    "description": "Method parameters; shape depends on the method.",
+                                },
+                            },
+                            "required": ["jsonrpc", "id", "method"],
+                        },
+                        "examples": {
+                            "message_send": {
+                                "summary": "Send a message (synchronous)",
+                                "value": {
+                                    "jsonrpc": "2.0",
+                                    "id": "1",
+                                    "method": "message/send",
+                                    "params": {
+                                        "message": {
+                                            "role": "user",
+                                            "parts": [
+                                                {
+                                                    "kind": "text",
+                                                    "text": "Hello from A2A",
+                                                }
+                                            ],
+                                            "messageId": "msg-1",
+                                            "contextId": "f5bd2a40-74b6-4f7a-b649-ea3f09890003",
+                                        }
+                                    },
+                                },
+                            },
+                            "message_stream": {
+                                "summary": "Send a message (streaming)",
+                                "value": {
+                                    "jsonrpc": "2.0",
+                                    "id": "2",
+                                    "method": "message/stream",
+                                    "params": {
+                                        "message": {
+                                            "role": "user",
+                                            "parts": [
+                                                {
+                                                    "kind": "text",
+                                                    "text": "Stream this response",
+                                                }
+                                            ],
+                                            "messageId": "msg-2",
+                                        }
+                                    },
+                                },
+                            },
+                            "tasks_get": {
+                                "summary": "Get a task",
+                                "value": {
+                                    "jsonrpc": "2.0",
+                                    "id": "3",
+                                    "method": "tasks/get",
+                                    "params": {
+                                        "id": "thread-uuid:run-uuid",
+                                        "contextId": "thread-uuid",
+                                        "historyLength": 5,
+                                    },
+                                },
+                            },
+                        },
+                    }
+                },
+            },
+            "responses": {
+                "200": {
+                    "description": "JSON-RPC response for non-streaming methods. For `message/stream`, the response is an SSE stream of JSON-RPC envelopes.",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "jsonrpc": {"type": "string", "enum": ["2.0"]},
+                                    "id": {"type": "string"},
+                                    "result": {
+                                        "type": "object",
+                                        "description": "Success result containing task information",
+                                    },
+                                    "error": {
+                                        "type": "object",
+                                        "properties": {
+                                            "code": {"type": "integer"},
+                                            "message": {"type": "string"},
+                                        },
+                                        "description": "Error information if request failed",
+                                    },
+                                },
+                                "required": ["jsonrpc", "id"],
+                            },
+                            "example": {
+                                "jsonrpc": "2.0",
+                                "id": "1",
+                                "result": {
+                                    "kind": "task",
+                                    "id": "thread-uuid:run-uuid",
+                                    "contextId": "thread-uuid",
+                                    "status": {"state": "completed"},
+                                    "artifacts": [
+                                        {
+                                            "artifactId": "artifact-uuid",
+                                            "name": "Assistant Response",
+                                            "parts": [
+                                                {"kind": "text", "text": "Hello back!"}
+                                            ],
+                                        }
+                                    ],
+                                },
+                            },
+                        },
+                        "text/event-stream": {
+                            "schema": {
+                                "type": "string",
+                                "description": "SSE stream of JSON-RPC response objects.",
+                            },
+                        },
+                    },
+                },
+                "400": {
+                    "description": "Bad Request (invalid JSON-RPC, invalid params, or missing Accept header)"
+                },
+                "401": {"description": "Unauthorized"},
+                "404": {"description": "Assistant not found"},
+                "500": {"description": "Internal server error"},
             },
         },
     },
