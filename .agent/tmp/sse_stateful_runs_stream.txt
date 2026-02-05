@@ -1,0 +1,27 @@
+event: metadata
+data: {"run_id":"019c2a97-2e57-7043-9ef0-c5e0915f482c","attempt":1}
+
+event: values
+data: {"messages":[{"content":"What is 2 + 2? Answer with just the number.","additional_kwargs":{},"response_metadata":{},"type":"human","name":null,"id":"d4e7944c-1399-46b2-82b8-39ec0c59a2fd"}]}
+
+event: messages/metadata
+data: {"lc_run--019c2a97-316e-7693-af14-ef52c27fcc61":{"metadata":{"owner":"391e3770-1f22-4a2f-a82c-22ed9561c512","graph_id":"agent","assistant_id":"1164f223-6700-4a30-88ba-758578025041","model_name":"custom:","base_url":"http://localhost:7374/v1","custom_model_name":"ministral-3b-instruct","custom_api_key":"EMPTY","temperature":0.1,"max_tokens":100,"system_prompt":"You are a helpful assistant. Answer questions concisely.","langgraph_auth_user_id":"391e3770-1f22-4a2f-a82c-22ed9561c512","langgraph_request_id":"028e9551-e868-4069-a20f-1062f4907299","run_id":"019c2a97-2e57-7043-9ef0-c5e0915f482c","thread_id":"30cd57fa-caf0-4642-9ea8-734ffb918244","user_id":"391e3770-1f22-4a2f-a82c-22ed9561c512","run_attempt":1,"langgraph_version":"1.0.7","langgraph_api_version":"0.7.9","langgraph_plan":"developer","langgraph_host":"self-hosted","langgraph_api_url":"http://127.0.0.1:2024","langgraph_step":1,"langgraph_node":"agent","langgraph_triggers":["branch:to:agent"],"langgraph_path":["__pregel_pull","agent"],"langgraph_checkpoint_ns":"agent:85399234-28a9-6278-2cab-b4568110f0d9","checkpoint_ns":"agent:85399234-28a9-6278-2cab-b4568110f0d9","ls_provider":"openai","ls_model_name":"ministral-3b-instruct","ls_model_type":"chat","ls_temperature":0.1,"ls_max_tokens":100}}}
+
+event: messages/partial
+data: [{"content":"","additional_kwargs":{},"response_metadata":{"model_provider":"openai"},"type":"ai","name":null,"id":"lc_run--019c2a97-316e-7693-af14-ef52c27fcc61","tool_calls":[],"invalid_tool_calls":[],"usage_metadata":null}]
+
+event: messages/partial
+data: [{"content":"4","additional_kwargs":{},"response_metadata":{"model_provider":"openai"},"type":"ai","name":null,"id":"lc_run--019c2a97-316e-7693-af14-ef52c27fcc61","tool_calls":[],"invalid_tool_calls":[],"usage_metadata":null}]
+
+event: messages/partial
+data: [{"content":"4","additional_kwargs":{},"response_metadata":{"model_provider":"openai","finish_reason":"stop","model_name":"ministral-3b-instruct"},"type":"ai","name":null,"id":"lc_run--019c2a97-316e-7693-af14-ef52c27fcc61","tool_calls":[],"invalid_tool_calls":[],"usage_metadata":null}]
+
+event: messages/partial
+data: [{"content":"4","additional_kwargs":{},"response_metadata":{"model_provider":"openai","finish_reason":"stop","model_name":"ministral-3b-instruct"},"type":"ai","name":null,"id":"lc_run--019c2a97-316e-7693-af14-ef52c27fcc61","tool_calls":[],"invalid_tool_calls":[],"usage_metadata":null}]
+
+event: updates
+data: {"agent":{"messages":[{"content":"4","additional_kwargs":{},"response_metadata":{"finish_reason":"stop","model_name":"ministral-3b-instruct","model_provider":"openai"},"type":"ai","name":null,"id":"lc_run--019c2a97-316e-7693-af14-ef52c27fcc61","tool_calls":[],"invalid_tool_calls":[],"usage_metadata":null}]}}
+
+event: values
+data: {"messages":[{"content":"What is 2 + 2? Answer with just the number.","additional_kwargs":{},"response_metadata":{},"type":"human","name":null,"id":"d4e7944c-1399-46b2-82b8-39ec0c59a2fd"},{"content":"4","additional_kwargs":{},"response_metadata":{"finish_reason":"stop","model_name":"ministral-3b-instruct","model_provider":"openai"},"type":"ai","name":null,"id":"lc_run--019c2a97-316e-7693-af14-ef52c27fcc61","tool_calls":[],"invalid_tool_calls":[],"usage_metadata":null}]}
+

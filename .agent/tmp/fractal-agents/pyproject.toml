@@ -1,0 +1,102 @@
+[tool.poetry]
+name = "fractal_agents"
+version = "0.0.1"
+description = "Fractal Agents"
+authors = ["Luke Skywalker <luke@uncensored.ai>"]
+readme = "README.md"
+packages = [
+    { include = "system_0", from = "src" },
+    { include = "system_1", from = "src" },
+    { include = "system_2", from = "src" },
+    # { include = "tests" },
+]
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.12"
+langchain-openai = "0.3.10"
+langchain-anthropic = "0.3.10"
+langchain = "^0.3.1"
+openai = "^1.51.0"
+langchain-community = "^0.3.1"
+copilotkit = "^0.1.42"
+uvicorn = "^0.34.0"
+gunicorn = "^21.2.0"
+python-dotenv = "^1.0.1"
+langchain-core = "^0.3.25"
+langgraph-cli = { extras = ["inmem"], version = "^0.1.64" }
+langchain-mcp-adapters = "0.0.5"
+fastmcp = "^0.4.1"
+langgraph = "^0.3.5"
+google-api-python-client = "^2.164.0"
+youtube-transcript-api = "^1.0.2"
+composio-langchain = "^0.7.10"
+composio-core = "^0.7.10"
+composio-openai = "^0.7.10"
+supabase = "^2.14.0"
+pytz = "2025.2"
+matplotlib = "^3.10.1"
+langfuse = "^2.60.2"
+langgraph-checkpoint-postgres = "^2.0.19"
+psycopg = "^3.2.6"
+psycopg-pool = "^3.2.6"
+redis = "^5.2.1"
+pandas = "^2.2.3"
+numpy = "^2.2.4"
+datasets = "^3.5.0"
+huggingface-hub = "^0.30.1"
+dotenv = "^0.9.9"
+
+[tool.poetry.group.dev.dependencies]
+tensorboard = "^2.19.0"
+ipywidgets = "^8.1.5"
+jupyter = "^1.1.1"
+grpcio = "^1.71.0"
+grpcio-tools = "^1.71.0"
+pytest = "^8.3.5"
+pytest-cov = "^4.1.0"
+protobuf = ">=5.26.1,<6.0dev"
+pytest-mock = "^3.14.0"
+parameterized = "^0.9.0"
+coverage = "^7.8.0"
+pytest-watch = "^4.2.0"
+fakeredis = "^2.28.1"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+fractal_agents = "src.app:main"
+# test = "pytest:main"
+# test-watch = "pytest_watch:main -- --config=.pytest-watch.ini"
+# test-cache-watch = "pytest_watch:main -- tests/unit/test_toolset_cache.py -v --config=.pytest-watch.ini"
+# test-cov = "pytest:main -- --cov=src --cov-report=term-missing"
+# test-cache = "pytest:main -- tests/unit/test_toolset_cache.py -v"
+
+[tool.pytest-watch]
+ignore = ["*.pyc", "__pycache__", ".git", ".venv", "venv", "dist", "build"]
+clear = true
+nobeep = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "--cov=src"
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["src/system_1/main.py", "tests/*", "**/__init__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "pass",
+    "raise ImportError",
+]
+show_missing = true
+fail_under = 70

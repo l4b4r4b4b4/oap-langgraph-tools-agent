@@ -1,0 +1,27 @@
+event: metadata
+data: {"run_id":"019c2a97-31f0-7572-a6db-2fb4d3453459","attempt":1}
+
+event: values
+data: {"messages":[{"content":"What is 3 + 3? Answer with just the number.","additional_kwargs":{},"response_metadata":{},"type":"human","name":null,"id":"a7080504-c2ac-4944-abe1-36537080ab89"}]}
+
+event: messages/metadata
+data: {"lc_run--019c2a97-345c-7c81-baeb-797d6a3e7541":{"metadata":{"owner":"391e3770-1f22-4a2f-a82c-22ed9561c512","model_name":"custom:","base_url":"http://localhost:7374/v1","custom_model_name":"ministral-3b-instruct","custom_api_key":"EMPTY","temperature":0.1,"max_tokens":100,"system_prompt":"You are a helpful assistant. Answer questions concisely.","langgraph_auth_user_id":"391e3770-1f22-4a2f-a82c-22ed9561c512","langgraph_request_id":"ad05c775-f5de-44f6-bf98-734f0762ece1","run_id":"019c2a97-31f0-7572-a6db-2fb4d3453459","thread_id":"816cb38b-6f62-42ed-8403-2be2c1a0e6ce","graph_id":"agent","assistant_id":"1164f223-6700-4a30-88ba-758578025041","user_id":"391e3770-1f22-4a2f-a82c-22ed9561c512","run_attempt":1,"langgraph_version":"1.0.7","langgraph_api_version":"0.7.9","langgraph_plan":"developer","langgraph_host":"self-hosted","langgraph_api_url":"http://127.0.0.1:2024","langgraph_step":1,"langgraph_node":"agent","langgraph_triggers":["branch:to:agent"],"langgraph_path":["__pregel_pull","agent"],"langgraph_checkpoint_ns":"agent:bc99c46f-a29c-0892-dcb3-d2a5680a8032","checkpoint_ns":"agent:bc99c46f-a29c-0892-dcb3-d2a5680a8032","ls_provider":"openai","ls_model_name":"ministral-3b-instruct","ls_model_type":"chat","ls_temperature":0.1,"ls_max_tokens":100}}}
+
+event: messages/partial
+data: [{"content":"","additional_kwargs":{},"response_metadata":{"model_provider":"openai"},"type":"ai","name":null,"id":"lc_run--019c2a97-345c-7c81-baeb-797d6a3e7541","tool_calls":[],"invalid_tool_calls":[],"usage_metadata":null}]
+
+event: messages/partial
+data: [{"content":"6","additional_kwargs":{},"response_metadata":{"model_provider":"openai"},"type":"ai","name":null,"id":"lc_run--019c2a97-345c-7c81-baeb-797d6a3e7541","tool_calls":[],"invalid_tool_calls":[],"usage_metadata":null}]
+
+event: messages/partial
+data: [{"content":"6","additional_kwargs":{},"response_metadata":{"model_provider":"openai","finish_reason":"stop","model_name":"ministral-3b-instruct"},"type":"ai","name":null,"id":"lc_run--019c2a97-345c-7c81-baeb-797d6a3e7541","tool_calls":[],"invalid_tool_calls":[],"usage_metadata":null}]
+
+event: messages/partial
+data: [{"content":"6","additional_kwargs":{},"response_metadata":{"model_provider":"openai","finish_reason":"stop","model_name":"ministral-3b-instruct"},"type":"ai","name":null,"id":"lc_run--019c2a97-345c-7c81-baeb-797d6a3e7541","tool_calls":[],"invalid_tool_calls":[],"usage_metadata":null}]
+
+event: updates
+data: {"agent":{"messages":[{"content":"6","additional_kwargs":{},"response_metadata":{"finish_reason":"stop","model_name":"ministral-3b-instruct","model_provider":"openai"},"type":"ai","name":null,"id":"lc_run--019c2a97-345c-7c81-baeb-797d6a3e7541","tool_calls":[],"invalid_tool_calls":[],"usage_metadata":null}]}}
+
+event: values
+data: {"messages":[{"content":"What is 3 + 3? Answer with just the number.","additional_kwargs":{},"response_metadata":{},"type":"human","name":null,"id":"a7080504-c2ac-4944-abe1-36537080ab89"},{"content":"6","additional_kwargs":{},"response_metadata":{"finish_reason":"stop","model_name":"ministral-3b-instruct","model_provider":"openai"},"type":"ai","name":null,"id":"lc_run--019c2a97-345c-7c81-baeb-797d6a3e7541","tool_calls":[],"invalid_tool_calls":[],"usage_metadata":null}]}
+
