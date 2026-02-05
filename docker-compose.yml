@@ -1,0 +1,253 @@
+volumes:
+  hf_cache:
+
+services:
+  embeddings:
+    deploy:
+      replicas: 0
+    image: ghcr.io/huggingface/text-embeddings-inference:86-1.6
+    volumes:
+      - hf_cache:/.hf_cache
+    ports:
+      - "8011-8014:8080"
+    ipc: host
+    # Replace runtime with devices for CDI
+    devices:
+      - nvidia.com/gpu=all
+    device_cgroup_rules:
+      - "c 195:* rmw"
+      - "c 236:* rmw"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - USE_FLASH_ATTENTION=True
+      - HF_HUB_ENABLE_HF_TRANSFER=1
+      - HF_HOME=/.hf_cache
+      - RUST_LOG=info
+      # Performance tuning for embedding models
+      - OMP_NUM_THREADS=8
+      - MKL_NUM_THREADS=8
+      - TOKENIZERS_PARALLELISM=true
+    restart: no
+    env_file: .env
+    command:
+      [
+        "--model-id",
+        "jinaai/jina-embeddings-v2-base-de",
+        "--hostname",
+        "0.0.0.0",
+        "--port",
+        "8080",
+        "--huggingface-hub-cache",
+        "/.hf_cache",
+        "--tokenization-workers",
+        "16",
+        "--max-concurrent-requests",
+        "1024",
+        "--max-batch-tokens",
+        "65536",
+        "--max-batch-requests",
+        "256",
+        "--max-client-batch-size",
+        "128",
+        "--auto-truncate",
+        "--payload-limit",
+        "10000000",
+      ]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "1"
+
+  rerankings:
+    deploy:
+      replicas: 0
+    image: ghcr.io/huggingface/text-embeddings-inference:86-1.6
+    volumes:
+      - hf_cache:/.hf_cache
+    ports:
+      - 8020:8080
+    container_name: rerankings
+    env_file: .env
+    ipc: host
+    # Replace runtime with devices for CDI
+    devices:
+      - nvidia.com/gpu=all
+    device_cgroup_rules:
+      - "c 195:* rmw"
+      - "c 236:* rmw"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - USE_FLASH_ATTENTION=True
+      - HF_HUB_ENABLE_HF_TRANSFER=1
+      - HF_HOME=/.hf_cache
+
+      - RUST_LOG=info
+      # Performance tuning for reranking models
+      - OMP_NUM_THREADS=8
+      - MKL_NUM_THREADS=8
+      - TOKENIZERS_PARALLELISM=true
+    restart: no
+    command:
+      [
+        "--model-id",
+        "BAAI/bge-reranker-v2-m3",
+        "--hostname",
+        "0.0.0.0",
+        "--port",
+        "8080",
+        "--huggingface-hub-cache",
+        "/.hf_cache",
+        "--tokenization-workers",
+        "16",
+        "--max-concurrent-requests",
+        "1024",
+        "--max-batch-tokens",
+        "32768",
+        "--max-batch-requests",
+        "256",
+        "--max-client-batch-size",
+        "64",
+        "--auto-truncate",
+        "--payload-limit",
+        "4000000",
+      ]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "1"
+
+  lm-awq:
+    deploy:
+      replicas: 0 # Disabled for now since we're using lm-gguf
+    volumes:
+      - hf_cache:/.hf_cache
+    restart: no
+    image: vllm/vllm-openai:latest
+    ports:
+      - 7373:80
+    device_cgroup_rules:
+      - "c 195:* rmw"
+      - "c 236:* rmw"
+    devices:
+      - nvidia.com/gpu=all
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HUGGINGFACEHUB_API_TOKEN:-your_hf_api_access_token}
+      - HF_HOME=/.hf_cache
+      - NVIDIA_VISIBLE_DEVICES=all
+      - VLLM_ATTENTION_BACKEND=FLASHINFER
+      - HF_HUB_ENABLE_HF_TRANSFER=1
+      - MAX_PARALLEL_LOADING_WORKERS=4
+    ipc: host
+    env_file:
+      - .env
+    command:
+      [
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "80",
+        "--model",
+        "solidrust/Mistral-7B-Instruct-v0.3-AWQ",
+        "--served-model-name",
+        "uai/lm-small",
+        "--max-model-len",
+        "4096",
+        "--max-num-batched-tokens",
+        "4096",
+        "--kv-cache-dtype",
+        "fp8",
+        "--enable-auto-tool-choice",
+        "--tool-call-parser",
+        "mistral",
+        "--chat-template",
+        "examples/tool_chat_template_mistral_parallel.jinja",
+        "--gpu-memory-utilization",
+        "0.55",
+        "--seed",
+        "4269",
+        "--max-num-seqs",
+        "1",
+        "--trust-remote-code",
+        "--enable-prefix-caching",
+        "--enable-chunked-prefill",
+      ]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://lm-awq:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  ministral:
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    device_cgroup_rules:
+      - "c 195:* rmw"
+      - "c 236:* rmw"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - HUGGING_FACE_HUB_TOKEN=${HUGGINGFACEHUB_API_TOKEN:-your_hf_api_access_token}
+      - HF_HOME=/.hf_cache
+      - VLLM_ATTENTION_BACKEND=FLASHINFER
+      - HF_HUB_ENABLE_HF_TRANSFER=1
+      - MAX_PARALLEL_LOADING_WORKERS=4
+    ipc: host
+    deploy:
+      replicas: 1
+    volumes:
+      - hf_cache:/.hf_cache
+    restart: no
+    image: vllm/vllm-openai:cu130-nightly
+    ports:
+      - 7374:80 # Changed port to avoid conflict with existing lm service
+    devices:
+      - nvidia.com/gpu=all
+    command: [
+        "mistralai/Ministral-3-3B-Instruct-2512",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "80",
+        "--served-model-name",
+        "ministral-3b-instruct",
+        "--max-model-len",
+        "8192",
+        "--max-num-batched-tokens",
+        "8192",
+        "--kv-cache-dtype",
+        "fp8",
+        "--enable-auto-tool-choice",
+        "--tool-call-parser",
+        "mistral",
+        "--gpu-memory-utilization",
+        "0.75",
+        "--seed",
+        "4272",
+        "--max-num-seqs",
+        "1",
+        "--trust-remote-code",
+        # "--enable-prefix-caching",
+        # "--enable-chunked-prefill",
+      ]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://lm-gguf:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5

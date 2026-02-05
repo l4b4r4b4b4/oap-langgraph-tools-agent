@@ -78,6 +78,11 @@
               jq
               tree
               httpie
+
+              # Cloud & Kubernetes
+              azure-cli
+              kubectl
+              kubernetes-helm
             ];
 
           profile = ''

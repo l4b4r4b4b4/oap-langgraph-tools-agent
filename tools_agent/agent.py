@@ -1,10 +1,12 @@
 import os
+import logging
 from langchain_core.runnables import RunnableConfig
 from typing import Optional, List
 from pydantic import BaseModel, Field
 from langgraph.prebuilt import create_react_agent
 from tools_agent.utils.tools import create_rag_tool
 from langchain.chat_models import init_chat_model
+from langchain_openai import ChatOpenAI
 from tools_agent.utils.token import fetch_tokens
 from mcp.client.streamable_http import streamablehttp_client
 from mcp import ClientSession
@@ -13,6 +15,77 @@ from tools_agent.utils.tools import (
     wrap_mcp_authenticate_tool,
     create_langchain_mcp_tool,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_present_configurable_keys(config: RunnableConfig) -> list[str]:
+    """Return a stable, non-sensitive view of the configurable keys present.
+
+    This intentionally does not log values to avoid leaking secrets.
+    """
+    configurable: dict = config.get("configurable", {}) or {}
+    return sorted(str(key) for key in configurable.keys())
+
+
+def _safe_mask_url(url: Optional[str]) -> Optional[str]:
+    """Mask potentially sensitive URL parts (query strings, userinfo).
+
+    This keeps the scheme/host/path which is enough to confirm routing.
+    """
+    if not url:
+        return url
+    # Avoid importing urllib just for logging; keep it conservative.
+    # Drop query fragments if present.
+    return url.split("?", 1)[0].split("#", 1)[0]
+
+
+def _merge_assistant_configurable_into_run_config(
+    config: RunnableConfig,
+) -> RunnableConfig:
+    """Merge assistant-level configurable settings into the run config.
+
+    LangGraph runtime-inmem passes per-run metadata in `configurable`, but in some
+    versions it may not automatically inject assistant `configurable` fields into
+    `graph(config)`. This merge reads the assistant settings (if present) and
+    overlays them onto the run config so fields such as `base_url` reach the agent.
+
+    Notes:
+        - Values are not logged here to avoid leaking secrets.
+        - Run-level keys take precedence over assistant-level keys.
+
+    Returns:
+        A new RunnableConfig with merged `configurable`.
+    """
+    original_configurable: dict = config.get("configurable", {}) or {}
+
+    # Common places LangGraph API may attach assistant settings:
+    # - "assistant" (object)
+    # - "assistant_config" (object)
+    # - "assistant_configurable" (already flattened)
+    assistant_configurable: dict = {}
+
+    assistant_container = original_configurable.get("assistant")
+    if isinstance(assistant_container, dict):
+        assistant_cfg = assistant_container.get("configurable")
+        if isinstance(assistant_cfg, dict):
+            assistant_configurable.update(assistant_cfg)
+
+    assistant_config_container = original_configurable.get("assistant_config")
+    if isinstance(assistant_config_container, dict):
+        assistant_cfg = assistant_config_container.get("configurable")
+        if isinstance(assistant_cfg, dict):
+            assistant_configurable.update(assistant_cfg)
+
+    assistant_config_flat = original_configurable.get("assistant_configurable")
+    if isinstance(assistant_config_flat, dict):
+        assistant_configurable.update(assistant_config_flat)
+
+    if not assistant_configurable:
+        return config
+
+    merged_configurable = {**assistant_configurable, **original_configurable}
+    return {**config, "configurable": merged_configurable}
 
 
 UNEDITABLE_SYSTEM_PROMPT = "\nIf the tool throws an error requiring authentication, provide the user with a Markdown link to the authentication page and prompt them to authenticate."
@@ -79,6 +152,10 @@ class GraphConfigPydantic(BaseModel):
                     {"label": "GPT 4o mini", "value": "openai:gpt-4o-mini"},
                     {"label": "GPT 4.1", "value": "openai:gpt-4.1"},
                     {"label": "GPT 4.1 mini", "value": "openai:gpt-4.1-mini"},
+                    {
+                        "label": "Custom OpenAI-compatible endpoint",
+                        "value": "custom:",
+                    },
                 ],
             }
         },
@@ -147,17 +224,67 @@ class GraphConfigPydantic(BaseModel):
             }
         },
     )
+    # Custom endpoint configuration
+    base_url: Optional[str] = Field(
+        default=None,
+        optional=True,
+        metadata={
+            "x_oap_ui_config": {
+                "type": "text",
+                "placeholder": "http://localhost:7374/v1",
+                "description": "Base URL for custom OpenAI-compatible API",
+                "visible_when": {"model_name": "custom:"},
+            }
+        },
+    )
+    custom_model_name: Optional[str] = Field(
+        default=None,
+        optional=True,
+        metadata={
+            "x_oap_ui_config": {
+                "type": "text",
+                "placeholder": "mistralai/ministral-3b-instruct",
+                "description": "Model name for custom endpoint",
+                "visible_when": {"model_name": "custom:"},
+            }
+        },
+    )
+    custom_api_key: Optional[str] = Field(
+        default=None,
+        optional=True,
+        metadata={
+            "x_oap_ui_config": {
+                "type": "password",
+                "placeholder": "Leave empty for local vLLM",
+                "description": "API key for custom endpoint (optional)",
+                "visible_when": {"model_name": "custom:"},
+            }
+        },
+    )
 
 
 def get_api_key_for_model(model_name: str, config: RunnableConfig):
     model_name = model_name.lower()
+
+    # Handle custom endpoints
+    if model_name.startswith("custom:"):
+        # First check config for custom_api_key
+        custom_key = config.get("configurable", {}).get("custom_api_key")
+        if custom_key:
+            return custom_key
+        # Fallback to environment variable
+        return os.getenv("CUSTOM_API_KEY")
+
+    # Existing logic for standard providers
     model_to_key = {
         "openai:": "OPENAI_API_KEY",
-        "anthropic:": "ANTHROPIC_API_KEY", 
-        "google": "GOOGLE_API_KEY"
+        "anthropic:": "ANTHROPIC_API_KEY",
+        "google": "GOOGLE_API_KEY",
     }
-    key_name = next((key for prefix, key in model_to_key.items() 
-                    if model_name.startswith(prefix)), None)
+    key_name = next(
+        (key for prefix, key in model_to_key.items() if model_name.startswith(prefix)),
+        None,
+    )
     if not key_name:
         return None
     api_keys = config.get("configurable", {}).get("apiKeys", {})
@@ -168,7 +295,25 @@ def get_api_key_for_model(model_name: str, config: RunnableConfig):
 
 
 async def graph(config: RunnableConfig):
-    cfg = GraphConfigPydantic(**config.get("configurable", {}))
+    config = _merge_assistant_configurable_into_run_config(config)
+
+    # INFO-level, runtime-safe logging to confirm config propagation.
+    # Do NOT log values that may contain secrets.
+    logger.info(
+        "graph() invoked; configurable_keys=%s",
+        _safe_present_configurable_keys(config),
+    )
+
+    cfg = GraphConfigPydantic(**(config.get("configurable", {}) or {}))
+
+    logger.info(
+        "graph() parsed_config; model_name=%s base_url_present=%s custom_model_name_present=%s custom_api_key_present=%s",
+        cfg.model_name,
+        bool(cfg.base_url),
+        bool(cfg.custom_model_name),
+        bool(cfg.custom_api_key),
+    )
+
     tools = []
 
     supabase_token = config.get("configurable", {}).get("x-supabase-access-token")
@@ -240,15 +385,55 @@ async def graph(config: RunnableConfig):
 
                     tools.extend(fetched_mcp_tools_list)
         except Exception as e:
-            print(f"Failed to fetch MCP tools: {e}")
+            # Avoid printing (may not route to runtime logs) and avoid leaking headers/tokens.
+            logger.warning("Failed to fetch MCP tools: %s", str(e))
             pass
 
-    model = init_chat_model(
-        cfg.model_name,
-        temperature=cfg.temperature,
-        max_tokens=cfg.max_tokens,
-        api_key=get_api_key_for_model(cfg.model_name, config) or "No token found"
-    )
+    # Initialize model based on configuration
+    if cfg.base_url:
+        # Custom endpoint - use ChatOpenAI with OpenAI-compatible base URL.
+        # LangChain's vLLM integration docs recommend `openai_api_base` + `openai_api_key="EMPTY"`.
+        masked_base_url = _safe_mask_url(cfg.base_url)
+        logger.info(
+            "LLM routing: custom endpoint enabled; base_url=%s", masked_base_url
+        )
+
+        # Get API key for custom endpoint (do not log the key)
+        api_key = get_api_key_for_model("custom:", config)
+        if not api_key:
+            # Use "EMPTY" for local vLLM that doesn't require authentication
+            api_key = "EMPTY"
+            logger.info("LLM auth: no custom API key provided; using EMPTY")
+        else:
+            logger.info("LLM auth: custom API key provided (masked)")
+
+        # Use custom model name if provided, otherwise use the configured model_name
+        model_name = cfg.custom_model_name or cfg.model_name
+        logger.info("LLM model: %s", model_name)
+
+        # Prefer the vLLM-recommended parameters. Avoid passing multiple aliases
+        # for the same setting to reduce ambiguity across versions.
+        model = ChatOpenAI(
+            openai_api_base=cfg.base_url,
+            openai_api_key=api_key,
+            model=model_name,
+            temperature=cfg.temperature,
+            max_tokens=cfg.max_tokens,
+        )
+    else:
+        # Standard provider - use init_chat_model
+        logger.info(
+            "LLM routing: standard provider enabled; model_name=%s", cfg.model_name
+        )
+        api_key = get_api_key_for_model(cfg.model_name, config)
+        logger.info("LLM auth: standard provider api key present=%s", bool(api_key))
+
+        model = init_chat_model(
+            cfg.model_name,
+            temperature=cfg.temperature,
+            max_tokens=cfg.max_tokens,
+            api_key=api_key or "No token found",
+        )
 
     return create_react_agent(
         prompt=cfg.system_prompt + UNEDITABLE_SYSTEM_PROMPT,

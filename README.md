@@ -5,6 +5,15 @@ A pre-built LangGraph tools agent for Open Agent Platform. It contains support f
 > [!TIP]
 > This project is built for [Open Agent Platform](https://github.com/langchain-ai/open-agent-platform), a citizen developer platform for building, testing, and using agents.
 
+## Runtimes
+
+This project supports two runtime options:
+
+1. **LangGraph Dev Runtime** (default) — Standard LangGraph development server
+2. **Robyn Runtime** (production) — High-performance Rust-based HTTP server with enhanced observability
+
+See [Robyn Runtime Documentation](robyn_server/README.md) for the production runtime option.
+
 ## Setup
 
 First, clone the repository and create a new virtual environment:
@@ -46,6 +55,26 @@ uv run langgraph dev --no-browser
 ```
 
 The server will now be running on `http://localhost:2024`.
+
+### Alternative: Robyn Runtime (Production)
+
+For production deployments with enhanced performance and observability:
+
+```bash
+# Run the Robyn runtime server
+uv run python -m robyn_server
+```
+
+The Robyn server will run on `http://localhost:8081` by default.
+
+**Key features:**
+- 🚀 Rust-powered HTTP runtime for lower latency
+- 🔒 Built-in Supabase JWT authentication
+- 📊 Prometheus metrics at `/metrics`
+- 🌊 Full SSE streaming support
+- 💾 Store API for long-term memory
+
+See the [Robyn Runtime README](robyn_server/README.md) and [Deployment Guide](robyn_server/DEPLOYMENT.md) for complete documentation.
 
 ## Open Agent Platform
 
