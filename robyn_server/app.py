@@ -22,6 +22,7 @@ from robyn_server.routes import (
     register_stream_routes,
     register_thread_routes,
 )
+from robyn_server.routes.mcp import register_mcp_routes
 from robyn_server.routes.metrics import register_metrics_routes
 from robyn_server.routes.store import register_store_routes
 
@@ -55,6 +56,7 @@ register_run_routes(app)
 register_stream_routes(app)
 register_metrics_routes(app)
 register_store_routes(app)
+register_mcp_routes(app)
 
 
 # ============================================================================
@@ -147,7 +149,7 @@ async def info() -> dict:
             "store": True,  # Store API supported
             "crons": False,  # Cron jobs not yet implemented
             "a2a": False,  # Agent-to-Agent not yet implemented
-            "mcp": False,  # MCP endpoints not yet implemented
+            "mcp": True,  # MCP endpoints implemented
             "metrics": True,  # Prometheus metrics available
         },
         # Available agent graphs

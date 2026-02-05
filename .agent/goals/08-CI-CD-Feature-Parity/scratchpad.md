@@ -69,15 +69,40 @@ Rationale:
 
 | Task | Name | Status | Priority |
 |------|------|--------|----------|
-| 01 | Organize & Commit Current Work | ⚪ Not Started | Critical |
-| 02 | Update CI Workflow for Robyn Tests | ⚪ Not Started | Critical |
-| 03 | Add Robyn Docker Workflow | ⚪ Not Started | Critical |
-| 04 | Add Release Workflow (PyPI) | ⚪ Not Started | High |
-| 05 | Verify Branch Protection Rules | ⚪ Not Started | High |
+| 01 | Organize & Commit Current Work | 🟢 Complete | Critical |
+| 02 | Update CI Workflow for Robyn Tests | 🟢 Complete | Critical |
+| 03 | Add Robyn Docker Workflow | 🟢 Complete | Critical |
+| 04 | Add Release Workflow (PyPI) | 🟢 Complete | High |
+| 05 | Verify Branch Protection Rules | 🟢 Complete | High |
 | 06 | Implement Crons API | ⚪ Not Started | Medium |
 | 07 | Implement A2A Protocol | ⚪ Not Started | Medium |
 | 08 | Implement MCP Protocol | ⚪ Not Started | Medium |
 | 09 | Documentation & Cleanup | ⚪ Not Started | Medium |
+
+---
+
+## Completed Work Summary
+
+### PR #1 Merged (2026-02-05)
+
+**CI/CD Pipeline Established:**
+- `ci.yml` - Lint + test for both `tools_agent` and `robyn_server`
+- `image.yml` - CD workflow for main LangGraph Docker image (main/tags only)
+- `robyn-image.yml` - CD workflow for Robyn Docker image (main/tags only)
+- `release.yml` - PyPI + GitHub release workflow on version tags
+
+**Key Fix Applied:**
+- Separated CI (lint+test on PRs) from CD (Docker builds on main/tags)
+- CI should NOT build Docker images - that's CD after merge
+
+**Branch Protection (Ruleset ID: 12191808):**
+- Requires PR to merge to main
+- Required status checks: `Lint`, `Test robyn_server`, `CI Success`
+- No approval required (solo dev workflow)
+
+**Docker Images Published to GHCR:**
+- `ghcr.io/l4b4r4b4b4/oap-langgraph-tools-agent:latest`
+- `ghcr.io/l4b4r4b4b4/oap-langgraph-tools-agent-robyn:latest`
 
 ---
 
@@ -332,12 +357,12 @@ jobs:
 
 ## Success Criteria
 
-### CI/CD (Tasks 01-05)
-- [ ] All uncommitted work properly organized and committed
-- [ ] CI runs tests for both tools_agent and robyn_server
-- [ ] Docker images built for both runtimes on push to main
-- [ ] Release workflow publishes to PyPI on version tags
-- [ ] Branch protection requires all CI checks to pass
+### CI/CD (Tasks 01-05) ✅ COMPLETE
+- [x] All uncommitted work properly organized and committed
+- [x] CI runs tests for both tools_agent and robyn_server
+- [x] Docker images built for both runtimes on push to main
+- [x] Release workflow publishes to PyPI on version tags
+- [x] Branch protection requires all CI checks to pass
 
 ### Feature Parity (Tasks 06-08)
 - [ ] Crons API endpoints implemented and tested

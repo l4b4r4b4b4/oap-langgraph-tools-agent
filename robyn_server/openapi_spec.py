@@ -45,6 +45,10 @@ TAGS = [
         "name": "System",
         "description": "System endpoints for health checks, metrics, and server information.",
     },
+    {
+        "name": "MCP",
+        "description": "Model Context Protocol endpoints. Exposes the LangGraph agent as an MCP server for external clients.",
+    },
 ]
 
 # Reusable schema components
@@ -2083,6 +2087,140 @@ PATHS: dict[str, Any] = {
                 }
             },
         }
+    },
+    # =========================================================================
+    # MCP (Model Context Protocol)
+    # =========================================================================
+    "/mcp/": {
+        "post": {
+            "tags": ["MCP"],
+            "summary": "MCP Post",
+            "description": """Implemented according to the Streamable HTTP Transport specification.
+Sends a JSON-RPC 2.0 message to the server.
+
+- **Request**: Provide an object with `jsonrpc`, `id`, `method`, and optional `params`.
+- **Response**: Returns a JSON-RPC response or acknowledgment.
+
+**Supported Methods:**
+- `initialize` - Client handshake with capabilities
+- `tools/list` - List available tools (returns the LangGraph agent)
+- `tools/call` - Execute the agent with a message
+
+**Notes:**
+- Stateless: Sessions are not persisted across requests.
+""",
+            "operationId": "post_mcp",
+            "parameters": [
+                {
+                    "name": "Accept",
+                    "in": "header",
+                    "required": False,
+                    "schema": {
+                        "type": "string",
+                        "enum": [
+                            "application/json",
+                            "application/json, text/event-stream",
+                        ],
+                    },
+                    "description": "Accept header should include 'application/json'.",
+                }
+            ],
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "jsonrpc": {
+                                    "type": "string",
+                                    "enum": ["2.0"],
+                                    "description": "JSON-RPC version (must be '2.0')",
+                                },
+                                "id": {
+                                    "oneOf": [{"type": "string"}, {"type": "integer"}],
+                                    "description": "Request ID for correlating responses",
+                                },
+                                "method": {
+                                    "type": "string",
+                                    "description": "Method to invoke (e.g., 'initialize', 'tools/list', 'tools/call')",
+                                },
+                                "params": {
+                                    "type": "object",
+                                    "description": "Method parameters",
+                                },
+                            },
+                            "required": ["jsonrpc", "method"],
+                        },
+                        "example": {
+                            "jsonrpc": "2.0",
+                            "id": "1",
+                            "method": "initialize",
+                            "params": {
+                                "clientInfo": {
+                                    "name": "test_client",
+                                    "version": "1.0.0",
+                                },
+                                "protocolVersion": "2024-11-05",
+                                "capabilities": {},
+                            },
+                        },
+                    }
+                },
+            },
+            "responses": {
+                "200": {
+                    "description": "Successful JSON-RPC response",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "jsonrpc": {"type": "string", "enum": ["2.0"]},
+                                    "id": {
+                                        "oneOf": [
+                                            {"type": "string"},
+                                            {"type": "integer"},
+                                        ]
+                                    },
+                                    "result": {"type": "object"},
+                                    "error": {
+                                        "type": "object",
+                                        "properties": {
+                                            "code": {"type": "integer"},
+                                            "message": {"type": "string"},
+                                        },
+                                    },
+                                },
+                            }
+                        }
+                    },
+                },
+                "202": {"description": "Notification accepted; no content body"},
+                "400": {"description": "Bad request: invalid JSON or message format"},
+                "500": {"description": "Internal server error"},
+            },
+        },
+        "get": {
+            "tags": ["MCP"],
+            "summary": "MCP Get",
+            "description": "Implemented according to the Streamable HTTP Transport specification. GET is not supported (streaming not implemented).",
+            "operationId": "get_mcp",
+            "responses": {
+                "405": {
+                    "description": "GET method not allowed; streaming not supported"
+                }
+            },
+        },
+        "delete": {
+            "tags": ["MCP"],
+            "summary": "Terminate Session",
+            "description": "Implemented according to the Streamable HTTP Transport specification. Since the server is stateless, there are no sessions to terminate.",
+            "operationId": "delete_mcp",
+            "responses": {
+                "404": {"description": "Session not found (server is stateless)"}
+            },
+        },
     },
 }
 
