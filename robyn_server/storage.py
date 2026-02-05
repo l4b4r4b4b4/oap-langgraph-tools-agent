@@ -15,6 +15,8 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 from uuid import uuid4
 
+from pydantic import BaseModel
+
 from robyn_server.models import Assistant, AssistantConfig, Run, Thread, ThreadState
 
 if TYPE_CHECKING:
@@ -22,8 +24,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Type variable for generic store
-T = TypeVar("T")
+# Type variable for generic store - bound to BaseModel for type safety
+T = TypeVar("T", bound="BaseModel")
 
 
 def generate_id() -> str:

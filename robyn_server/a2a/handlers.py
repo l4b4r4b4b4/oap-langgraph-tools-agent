@@ -38,6 +38,9 @@ from robyn_server.storage import get_storage
 
 logger = logging.getLogger(__name__)
 
+# Maximum characters to show in message preview for logging/placeholders
+MAX_MESSAGE_PREVIEW_LENGTH = 100
+
 
 class A2AMethodHandler:
     """Handler for A2A JSON-RPC methods.
@@ -442,7 +445,9 @@ class A2AMethodHandler:
             if response_parts:
                 return response_parts[-1]
 
-            return f"[Agent processed message: {message[:100]}...]"
+            return (
+                f"[Agent processed message: {message[:MAX_MESSAGE_PREVIEW_LENGTH]}...]"
+            )
 
         except ImportError:
             logger.warning("Agent execution not available - returning placeholder")

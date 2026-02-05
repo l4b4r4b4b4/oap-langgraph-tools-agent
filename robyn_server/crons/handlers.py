@@ -98,7 +98,7 @@ class CronHandler:
 
         # Check if already expired
         if is_cron_expired(create_data.end_time):
-            raise ValueError("Cron end_time is in the past")
+            raise ValueError(f"Cron end_time {create_data.end_time} is in the past")
 
         # Create cron in storage
         cron_data = {

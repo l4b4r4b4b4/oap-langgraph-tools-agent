@@ -289,7 +289,7 @@ class TestCronHandler:
             end_time=datetime.now(timezone.utc) - timedelta(days=1),
         )
 
-        with pytest.raises(ValueError, match="end_time is in the past"):
+        with pytest.raises(ValueError, match="Cron end_time .* is in the past"):
             await handler.create_cron(create_data, owner_id)
 
     @pytest.mark.asyncio
