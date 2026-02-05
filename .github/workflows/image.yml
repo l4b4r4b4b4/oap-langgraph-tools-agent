@@ -1,14 +1,11 @@
-name: CI / build-image
+name: CD / build-image
 
 on:
   push:
     branches:
-      - '**'
+      - main
     tags:
-      - 'v*'
-  pull_request:
-    branches:
-      - '**'
+      - "v*"
 
 env:
   REGISTRY: ghcr.io
@@ -16,6 +13,7 @@ env:
 
 jobs:
   build-and-push:
+    name: Build and Push Image
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -40,9 +38,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch,prefix=branch-
-            type=sha,prefix=sha-
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,prefix=sha-
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
@@ -51,7 +48,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
