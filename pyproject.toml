@@ -1,6 +1,6 @@
 [project]
 name = "tools_agent"
-version = "0.1.0"
+version = "0.0.1"
 description = "LangGraph tools agent with MCP and a RAG tool"
 authors = [
     { name = "langchain-ai" },
