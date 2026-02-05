@@ -12,15 +12,20 @@ The storage can later be swapped for Postgres/Supabase persistence.
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 from uuid import uuid4
+
+from pydantic import BaseModel
 
 from robyn_server.models import Assistant, AssistantConfig, Run, Thread, ThreadState
 
+if TYPE_CHECKING:
+    from robyn_server.crons.schemas import Cron
+
 logger = logging.getLogger(__name__)
 
-# Type variable for generic store
-T = TypeVar("T", Assistant, Thread, Run)
+# Type variable for generic store - bound to BaseModel for type safety
+T = TypeVar("T", bound="BaseModel")
 
 
 def generate_id() -> str:
@@ -876,6 +881,128 @@ class StoreStorage:
 
 
 # ============================================================================
+# Cron Store
+# ============================================================================
+
+
+class CronStore(BaseStore["Cron"]):
+    """Store for cron job resources.
+
+    Manages scheduled cron jobs with owner isolation.
+    """
+
+    def __init__(self):
+        super().__init__(id_field="cron_id")
+
+    def _to_model(self, data: dict[str, Any]) -> "Cron":
+        """Convert raw data to Cron model."""
+        from robyn_server.crons.schemas import Cron
+
+        return Cron(
+            cron_id=data["cron_id"],
+            assistant_id=data.get("assistant_id"),
+            thread_id=data["thread_id"],
+            end_time=data.get("end_time"),
+            schedule=data["schedule"],
+            created_at=data["created_at"],
+            updated_at=data["updated_at"],
+            user_id=data.get("user_id"),
+            payload=data.get("payload", {}),
+            next_run_date=data.get("next_run_date"),
+            metadata=data.get("metadata", {}),
+        )
+
+    def create(self, data: dict[str, Any], owner_id: str) -> "Cron":
+        """Create a new cron with owner stamping.
+
+        Args:
+            data: Cron data including schedule, assistant_id, etc.
+            owner_id: ID of the owner
+
+        Returns:
+            Created Cron instance
+        """
+        resource_id = generate_id()
+        now = utc_now()
+
+        # Ensure metadata exists and stamp owner
+        metadata = data.get("metadata", {}).copy()
+        metadata["owner"] = owner_id
+
+        # Build full resource data
+        resource_data = {
+            **data,
+            "cron_id": resource_id,
+            "metadata": metadata,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+        self._data[resource_id] = resource_data
+        logger.debug(f"Created cron: {resource_id}")
+
+        return self._to_model(resource_data)
+
+    def update(
+        self,
+        cron_id: str,
+        owner_id: str,
+        updates: dict[str, Any],
+    ) -> "Cron | None":
+        """Update a cron job.
+
+        Args:
+            cron_id: ID of the cron to update
+            owner_id: ID of the requesting user
+            updates: Fields to update
+
+        Returns:
+            Updated Cron or None if not found
+        """
+        resource_data = self._data.get(cron_id)
+        if resource_data is None:
+            return None
+
+        # Check owner
+        if self._get_owner(resource_data) != owner_id:
+            logger.debug(f"Access denied: cron {cron_id} not owned by {owner_id}")
+            return None
+
+        # Apply updates
+        resource_data.update(updates)
+        resource_data["updated_at"] = utc_now()
+
+        self._data[cron_id] = resource_data
+        logger.debug(f"Updated cron: {cron_id}")
+
+        return self._to_model(resource_data)
+
+    def count(self, owner_id: str, **filters: Any) -> int:
+        """Count crons matching filters.
+
+        Args:
+            owner_id: ID of the requesting user
+            **filters: Additional equality filters
+
+        Returns:
+            Count of matching crons
+        """
+        count = 0
+        for resource_data in self._data.values():
+            # Check owner
+            if self._get_owner(resource_data) != owner_id:
+                continue
+
+            # Check additional filters
+            if not self._matches_filters(resource_data, filters):
+                continue
+
+            count += 1
+
+        return count
+
+
+# ============================================================================
 # Storage Container
 # ============================================================================
 
@@ -891,6 +1018,7 @@ class Storage:
         self.threads = ThreadStore()
         self.runs = RunStore()
         self.store = StoreStorage()
+        self.crons = CronStore()
 
     def clear_all(self) -> None:
         """Clear all stores (for testing only)."""
@@ -898,6 +1026,7 @@ class Storage:
         self.threads.clear()
         self.runs.clear()
         self.store.clear()
+        self.crons.clear()
 
 
 # ============================================================================
