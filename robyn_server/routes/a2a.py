@@ -10,6 +10,8 @@ Endpoints:
 - POST /a2a/{assistant_id} - JSON-RPC 2.0 message handler
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from typing import TYPE_CHECKING, AsyncGenerator
