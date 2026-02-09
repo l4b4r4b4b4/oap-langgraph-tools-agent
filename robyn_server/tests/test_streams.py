@@ -18,8 +18,7 @@ from robyn_server.routes.sse import (
     create_ai_message,
     create_human_message,
     format_error_event,
-    format_messages_metadata_event,
-    format_messages_partial_event,
+    format_messages_tuple_event,
     format_metadata_event,
     format_sse_event,
     format_updates_event,
@@ -142,28 +141,31 @@ class TestSSEFrameFormatting:
         assert '"agent"' in result
         assert '"messages"' in result
 
-    def test_format_messages_partial_event(self):
-        """Test messages/partial event formatting."""
-        messages = [{"content": "partial", "type": "ai", "id": "test-id"}]
-        result = format_messages_partial_event(messages)
+    def test_format_messages_tuple_event(self):
+        """Test messages-tuple event formatting (event: messages)."""
+        message_delta = {"content": "Hello", "type": "ai", "id": "test-id"}
+        metadata = {"langgraph_node": "agent", "run_id": "test-run"}
+        result = format_messages_tuple_event(message_delta, metadata)
 
-        assert "event: messages/partial\n" in result
-        assert '"content":"partial"' in result
+        assert "event: messages\n" in result
+        # Should be a 2-element tuple [message_delta, metadata]
+        parsed_data = json.loads(result.split("data: ")[1].strip())
+        assert isinstance(parsed_data, list)
+        assert len(parsed_data) == 2
+        assert parsed_data[0]["content"] == "Hello"
+        assert parsed_data[0]["type"] == "ai"
+        assert parsed_data[1]["langgraph_node"] == "agent"
+        assert parsed_data[1]["run_id"] == "test-run"
 
-    def test_format_messages_metadata_event(self):
-        """Test messages/metadata event formatting."""
-        metadata = {
-            "lc_run--test": {
-                "metadata": {
-                    "run_id": "test-run",
-                    "thread_id": "test-thread",
-                }
-            }
-        }
-        result = format_messages_metadata_event(metadata)
+    def test_format_messages_tuple_event_empty_content(self):
+        """Test messages-tuple with empty content delta (initial event)."""
+        message_delta = {"content": "", "type": "ai", "id": "test-id"}
+        metadata = {"langgraph_node": "agent"}
+        result = format_messages_tuple_event(message_delta, metadata)
 
-        assert "event: messages/metadata\n" in result
-        assert '"run_id":"test-run"' in result
+        assert "event: messages\n" in result
+        parsed_data = json.loads(result.split("data: ")[1].strip())
+        assert parsed_data[0]["content"] == ""
 
     def test_format_error_event(self):
         """Test error event formatting."""
@@ -346,27 +348,31 @@ class TestSSEEventSequence:
     """Tests for correct SSE event sequencing."""
 
     def test_event_sequence_order(self):
-        """Test that events are emitted in correct order."""
+        """Test that events are emitted in correct order.
+
+        New protocol: no separate messages/metadata event. Each messages
+        event is a [delta, metadata] tuple with ``event: messages``.
+        """
         run_id = "test-run-id"
+        metadata = {"langgraph_node": "agent", "run_id": run_id}
 
         events = []
 
-        # Simulate the event sequence
+        # Simulate the event sequence (new messages-tuple protocol)
         events.append(format_metadata_event(run_id, attempt=1))
         events.append(
             format_values_event({"messages": [{"type": "human", "content": "Hello"}]})
         )
+        # Initial empty-content delta
         events.append(
-            format_messages_metadata_event(
-                {"lc_run--123": {"metadata": {"run_id": run_id}}}
+            format_messages_tuple_event(
+                {"content": "", "type": "ai", "id": "123"}, metadata
             )
         )
+        # Streaming delta
         events.append(
-            format_messages_partial_event([{"content": "", "type": "ai", "id": "123"}])
-        )
-        events.append(
-            format_messages_partial_event(
-                [{"content": "Response", "type": "ai", "id": "123"}]
+            format_messages_tuple_event(
+                {"content": "Response", "type": "ai", "id": "123"}, metadata
             )
         )
         events.append(
@@ -388,11 +394,15 @@ class TestSSEEventSequence:
         # Verify sequence
         assert "event: metadata" in events[0]
         assert "event: values" in events[1]
-        assert "event: messages/metadata" in events[2]
-        assert "event: messages/partial" in events[3]
-        assert "event: messages/partial" in events[4]
-        assert "event: updates" in events[5]
-        assert "event: values" in events[6]
+        assert "event: messages" in events[2]
+        assert "event: messages" in events[3]
+        assert "event: updates" in events[4]
+        assert "event: values" in events[5]
+
+        # Verify NO old-format events present
+        for event in events:
+            assert "messages/partial" not in event
+            assert "messages/metadata" not in event
 
     def test_all_events_end_with_double_newline(self):
         """Test that all SSE events end with double newline."""
@@ -400,8 +410,9 @@ class TestSSEEventSequence:
             format_metadata_event("run-1"),
             format_values_event({"messages": []}),
             format_updates_event("agent", {"messages": []}),
-            format_messages_partial_event([{"content": "test"}]),
-            format_messages_metadata_event({"test": {}}),
+            format_messages_tuple_event(
+                {"content": "test", "type": "ai"}, {"langgraph_node": "agent"}
+            ),
             format_error_event("test error"),
         ]
 
@@ -643,7 +654,7 @@ class TestExecuteRunStreamIntegration:
     async def test_execute_run_stream_streams_tokens(
         self, storage, mock_user_identity, assistant, thread
     ):
-        """Test that streaming tokens emit messages/partial events."""
+        """Test that streaming tokens emit messages-tuple events with deltas."""
         from robyn_server.routes.streams import execute_run_stream
 
         mock_agent = AsyncMock()
@@ -656,7 +667,7 @@ class TestExecuteRunStreamIntegration:
                 "data": {},
                 "metadata": {},
             }
-            # Stream tokens
+            # Stream tokens (these are already deltas from astream_events v2)
             yield {
                 "event": "on_chat_model_stream",
                 "name": "ChatOpenAI",
@@ -697,13 +708,39 @@ class TestExecuteRunStreamIntegration:
             ):
                 events.append(event)
 
-            # Find messages/partial events
-            partial_events = [e for e in events if "messages/partial" in e]
-            assert len(partial_events) >= 2  # At least initial empty + streaming
+            # Find messages-tuple events (event: messages)
+            messages_events = [e for e in events if e.startswith("event: messages\n")]
+            # At least: initial empty delta + "Hello" + " world" + final empty delta
+            assert len(messages_events) >= 3
 
-            # Check accumulated content
-            last_partial = partial_events[-1]
-            assert "Hello world" in last_partial
+            # Verify NO old-format events
+            for event in events:
+                assert "messages/partial" not in event
+                assert "messages/metadata" not in event
+
+            # Verify each messages event is a [delta, metadata] tuple
+            for msg_event in messages_events:
+                data_line = msg_event.split("data: ", 1)[1].strip()
+                parsed = json.loads(data_line)
+                assert isinstance(parsed, list), "messages event data must be a list"
+                assert len(parsed) == 2, "messages event must be a 2-element tuple"
+                assert "content" in parsed[0], "first element must have content"
+                assert isinstance(parsed[1], dict), "second element must be metadata"
+
+            # Verify content is DELTA (not accumulated)
+            # The "Hello" delta should appear, NOT "Hello world" in a single event
+            delta_contents = []
+            for msg_event in messages_events:
+                data_line = msg_event.split("data: ", 1)[1].strip()
+                parsed = json.loads(data_line)
+                delta_contents.append(parsed[0]["content"])
+
+            # First is empty (initial), then "Hello", then " world", then "" (final)
+            assert "" in delta_contents  # initial empty delta
+            assert "Hello" in delta_contents
+            assert " world" in delta_contents
+            # Accumulated "Hello world" should NOT appear as a single delta
+            assert "Hello world" not in delta_contents
 
     @pytest.mark.asyncio
     async def test_execute_run_stream_emits_final_values(

@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-02-20
+
+### Fixed
+
+#### SSE Messages-Tuple Protocol Compatibility
+
+The SSE streaming protocol now emits the `messages-tuple` format expected by
+`@langchain/langgraph-sdk` ≥ v1.6.0, fixing real-time chat streaming in
+downstream consumers (e.g. docproc-platform).
+
+**What changed:**
+- `event: messages/partial` → `event: messages` with `[message_delta, metadata]` tuple
+- `event: messages/metadata` removed — metadata is now included inline with every `messages` event
+- Message content is now a **delta** (new token only), not accumulated text
+- The SDK's `MessageTupleManager.add()` calls `.concat()` on chunks, so accumulated content caused duplicated/garbled text and frozen browser tabs
+
+**Files modified:**
+- `robyn_server/routes/sse.py` — replaced `format_messages_partial_event` and `format_messages_metadata_event` with `format_messages_tuple_event`
+- `robyn_server/routes/streams.py` — `execute_run_stream()` now emits delta-based `messages` tuple events with flat inline metadata
+- `robyn_server/tests/test_streams.py` — updated all SSE tests for new protocol format (442 pass)
+
+**Root cause:** The SDK's `matchEventType("messages", "messages/partial")` returns `false` because the `|` separator is for subgraph namespacing, not event subtypes. Only exact `"messages"` match works.
+
 ## [0.0.1] - 2026-02-05
 
 ### Added

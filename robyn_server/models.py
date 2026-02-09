@@ -26,7 +26,7 @@ class ServiceInfoResponse(BaseModel):
 
     service: str = "oap-langgraph-tools-agent"
     runtime: str = "robyn"
-    version: str = "0.1.0"
+    version: str = "0.0.2"
 
 
 # ============================================================================

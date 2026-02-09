@@ -24,8 +24,7 @@ from robyn_server.routes.sse import (
     create_ai_message,
     format_error_event,
     format_metadata_event,
-    format_messages_metadata_event,
-    format_messages_partial_event,
+    format_messages_tuple_event,
     format_updates_event,
     format_values_event,
     sse_headers,
@@ -603,8 +602,8 @@ async def execute_run_stream(
         return
 
     # Track state for SSE event generation
-    emitted_metadata = False
     current_ai_message_id: str | None = None
+    current_metadata: dict[str, Any] = {}
     accumulated_content = ""
     final_ai_message_dict: dict[str, Any] | None = None
     all_messages: list[dict[str, Any]] = list(initial_values["messages"])
@@ -624,45 +623,38 @@ async def execute_run_stream(
             event_run_id = event.get("run_id", "")
             event_metadata = event.get("metadata", {})
 
-            # Handle chat model start - emit messages/metadata
-            if event_kind == "on_chat_model_start" and not emitted_metadata:
+            # Handle chat model start — build metadata, emit initial empty delta
+            if event_kind == "on_chat_model_start" and not current_ai_message_id:
                 current_ai_message_id = f"lc_run--{event_run_id}"
                 accumulated_content = ""
 
-                # Build metadata similar to LangGraph runtime
-                messages_metadata = {
-                    current_ai_message_id: {
-                        "metadata": {
-                            "owner": owner_id,
-                            "graph_id": "agent",
-                            "assistant_id": assistant_id,
-                            "run_id": run_id,
-                            "thread_id": thread_id,
-                            "user_id": owner_id,
-                            "langgraph_node": event_metadata.get(
-                                "langgraph_node", "agent"
-                            ),
-                            "langgraph_step": event_metadata.get("langgraph_step", 1),
-                            **{
-                                k: v
-                                for k, v in event_metadata.items()
-                                if k.startswith("ls_")
-                            },
-                        }
-                    }
+                # Build flat metadata dict (included inline with every
+                # messages-tuple event — no separate metadata event needed)
+                current_metadata = {
+                    "owner": owner_id,
+                    "graph_id": "agent",
+                    "assistant_id": assistant_id,
+                    "run_id": run_id,
+                    "thread_id": thread_id,
+                    "user_id": owner_id,
+                    "langgraph_node": event_metadata.get("langgraph_node", "agent"),
+                    "langgraph_step": event_metadata.get("langgraph_step", 1),
+                    "langgraph_checkpoint_ns": event_metadata.get(
+                        "langgraph_checkpoint_ns", ""
+                    ),
+                    # Forward LangSmith-style ls_* keys from LangChain metadata
+                    **{k: v for k, v in event_metadata.items() if k.startswith("ls_")},
                 }
-                yield format_messages_metadata_event(messages_metadata)
-                emitted_metadata = True
 
-                # Emit first empty partial
-                partial_msg = create_ai_message("", current_ai_message_id)
-                yield format_messages_partial_event([partial_msg])
+                # Emit initial empty-content delta as messages tuple
+                initial_delta = create_ai_message("", current_ai_message_id)
+                yield format_messages_tuple_event(initial_delta, current_metadata)
 
-            # Handle streaming tokens - emit messages/partial
+            # Handle streaming tokens — emit content DELTA (not accumulated)
             elif event_kind == "on_chat_model_stream":
                 chunk = event_data.get("chunk")
                 if chunk and current_ai_message_id:
-                    # Extract content from chunk
+                    # astream_events v2 already yields per-token deltas
                     if isinstance(chunk, AIMessageChunk):
                         chunk_content = chunk.content or ""
                     elif isinstance(chunk, dict):
@@ -671,17 +663,20 @@ async def execute_run_stream(
                         chunk_content = str(chunk) if chunk else ""
 
                     if chunk_content:
+                        # Accumulate locally (needed for final values event)
                         accumulated_content += chunk_content
-                        partial_msg = create_ai_message(
-                            accumulated_content, current_ai_message_id
-                        )
-                        yield format_messages_partial_event([partial_msg])
 
-            # Handle chat model end - emit final partial with finish_reason
+                        # Emit the DELTA only — SDK concatenates via .concat()
+                        delta_msg = create_ai_message(
+                            chunk_content, current_ai_message_id
+                        )
+                        yield format_messages_tuple_event(delta_msg, current_metadata)
+
+            # Handle chat model end — emit final delta with finish_reason
             elif event_kind == "on_chat_model_end":
                 output = event_data.get("output")
                 if output and current_ai_message_id:
-                    # Extract final message content and metadata
+                    # Extract response metadata for finish_reason / model_name
                     if isinstance(output, AIMessage):
                         final_content = output.content or accumulated_content
                         response_metadata = (
@@ -698,6 +693,7 @@ async def execute_run_stream(
                     model_name = response_metadata.get("model_name")
                     model_provider = response_metadata.get("model_provider", "openai")
 
+                    # Build the complete final AI message (for updates + values events)
                     final_ai_message_dict = create_ai_message(
                         final_content,
                         current_ai_message_id,
@@ -705,7 +701,17 @@ async def execute_run_stream(
                         model_name=model_name,
                         model_provider=model_provider,
                     )
-                    yield format_messages_partial_event([final_ai_message_dict])
+
+                    # Emit a final empty-content delta carrying the finish metadata.
+                    # All actual content was already streamed as deltas above.
+                    final_delta = create_ai_message(
+                        "",
+                        current_ai_message_id,
+                        finish_reason=finish_reason,
+                        model_name=model_name,
+                        model_provider=model_provider,
+                    )
+                    yield format_messages_tuple_event(final_delta, current_metadata)
 
             # Handle chain/graph end - emit updates event
             elif event_kind == "on_chain_end" and event_name == "agent":
