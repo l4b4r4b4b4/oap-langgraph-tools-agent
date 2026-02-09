@@ -113,32 +113,31 @@ def format_updates_event(node_name: str, updates: dict[str, Any]) -> str:
     return format_sse_event("updates", {node_name: updates})
 
 
-def format_messages_partial_event(messages: list[dict[str, Any]]) -> str:
-    """Format a messages/partial SSE event.
+def format_messages_tuple_event(
+    message_delta: dict[str, Any],
+    metadata: dict[str, Any],
+) -> str:
+    """Format a messages-tuple SSE event.
 
-    Used for streaming token chunks.
+    Emits ``event: messages`` with a 2-element tuple ``[message_delta, metadata]``
+    matching the protocol expected by ``@langchain/langgraph-sdk`` ≥ v1.6.0.
 
-    Args:
-        messages: List of partial message objects
-
-    Returns:
-        SSE-formatted messages/partial event
-    """
-    return format_sse_event("messages/partial", messages)
-
-
-def format_messages_metadata_event(metadata: dict[str, Any]) -> str:
-    """Format a messages/metadata SSE event.
-
-    Contains rich metadata about the LLM invocation.
+    The *message_delta* must contain only **new** content (a delta), not
+    the accumulated text.  The SDK's ``MessageTupleManager.add()`` calls
+    ``.concat()`` on message chunks, so sending accumulated content would
+    result in duplicated text.
 
     Args:
-        metadata: Metadata dictionary
+        message_delta: Message dict whose ``content`` field holds only the
+            new token(s) produced since the last event.
+        metadata: Flat metadata dict (e.g. ``{"langgraph_node": "agent", …}``).
+            Included inline with every event so the SDK does not need a
+            separate metadata event.
 
     Returns:
-        SSE-formatted messages/metadata event
+        SSE-formatted ``event: messages`` string.
     """
-    return format_sse_event("messages/metadata", metadata)
+    return format_sse_event("messages", [message_delta, metadata])
 
 
 def format_error_event(error: str, code: str | None = None) -> str:
