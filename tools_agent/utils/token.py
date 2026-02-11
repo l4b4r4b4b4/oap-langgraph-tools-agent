@@ -1,9 +1,30 @@
+"""MCP token exchange and caching utilities.
+
+Handles OAuth2 token exchange with MCP servers and caches tokens in the
+LangGraph Store using the canonical org-scoped namespace convention::
+
+    (org_id, user_id, assistant_id, "tokens")
+
+See :mod:`tools_agent.utils.store_namespace` for the namespace contract.
+"""
+
 import logging
 from typing import Any
 
 import aiohttp
 from langchain_core.runnables import RunnableConfig
 from langgraph.config import get_store
+
+from tools_agent.utils.store_namespace import (
+    CATEGORY_TOKENS,
+    build_namespace,
+    extract_namespace_components,
+)
+
+logger = logging.getLogger(__name__)
+
+# Store key for the cached token data within the namespace.
+_TOKEN_STORE_KEY = "data"
 
 
 async def get_mcp_access_token(
@@ -38,22 +59,48 @@ async def get_mcp_access_token(
             ) as token_response:
                 if token_response.status != 200:
                     response_text = await token_response.text()
-                    logging.error(f"Token exchange failed: {response_text}")
+                    logger.error("Token exchange failed: %s", response_text)
                     return None
 
                 token_data = await token_response.json()
                 return token_data if isinstance(token_data, dict) else None
-    except Exception as e:
-        logging.error(f"Error during token exchange: {e}")
+    except Exception:
+        logger.exception("Error during token exchange")
 
     return None
+
+
+def _build_token_namespace(
+    config: RunnableConfig,
+) -> tuple[str, str, str, str] | None:
+    """Build the store namespace tuple for token caching.
+
+    Extracts ``(org_id, user_id, assistant_id)`` from the config and appends
+    the ``"tokens"`` category.
+
+    Returns:
+        A 4-tuple namespace, or ``None`` if required components are missing.
+    """
+    components = extract_namespace_components(config)
+    if components is None:
+        return None
+
+    return build_namespace(
+        components.org_id,
+        components.user_id,
+        components.assistant_id,
+        CATEGORY_TOKENS,
+    )
 
 
 async def get_tokens(config: RunnableConfig) -> dict[str, Any] | None:
     """Return cached MCP tokens from the LangGraph store if present and valid.
 
+    Uses the org-scoped namespace ``(org_id, user_id, assistant_id, "tokens")``.
+
     This function is deliberately defensive:
     - Store may be unavailable (returns None).
+    - Namespace components may be missing (returns None).
     - Token objects may have unexpected shapes.
     - Missing/invalid expiration metadata results in cache eviction + None.
     """
@@ -61,18 +108,14 @@ async def get_tokens(config: RunnableConfig) -> dict[str, Any] | None:
     if store is None:
         return None
 
-    configurable = config.get("configurable", {}) or {}
-    thread_id = configurable.get("thread_id")
-    if not thread_id:
-        return None
-
-    user_id = configurable.get("owner")
-    if not user_id:
+    namespace = _build_token_namespace(config)
+    if namespace is None:
         return None
 
     try:
-        token_record = await store.aget((user_id, "tokens"), "data")
+        token_record = await store.aget(namespace, _TOKEN_STORE_KEY)
     except Exception:
+        logger.debug("get_tokens: store.aget failed", exc_info=True)
         return None
 
     if not token_record:
@@ -86,7 +129,7 @@ async def get_tokens(config: RunnableConfig) -> dict[str, Any] | None:
     if created_at is None:
         # Without created_at, we cannot safely evaluate expiry.
         try:
-            await store.adelete((user_id, "tokens"), "data")
+            await store.adelete(namespace, _TOKEN_STORE_KEY)
         except Exception:
             pass
         return None
@@ -101,7 +144,7 @@ async def get_tokens(config: RunnableConfig) -> dict[str, Any] | None:
 
     if expires_in_seconds is None:
         try:
-            await store.adelete((user_id, "tokens"), "data")
+            await store.adelete(namespace, _TOKEN_STORE_KEY)
         except Exception:
             pass
         return None
@@ -116,7 +159,7 @@ async def get_tokens(config: RunnableConfig) -> dict[str, Any] | None:
 
     if current_time > expiration_time:
         try:
-            await store.adelete((user_id, "tokens"), "data")
+            await store.adelete(namespace, _TOKEN_STORE_KEY)
         except Exception:
             pass
         return None
@@ -125,7 +168,10 @@ async def get_tokens(config: RunnableConfig) -> dict[str, Any] | None:
 
 
 async def set_tokens(config: RunnableConfig, tokens: dict[str, Any] | None) -> None:
-    """Persist MCP tokens to the LangGraph store (best-effort)."""
+    """Persist MCP tokens to the LangGraph store (best-effort).
+
+    Uses the org-scoped namespace ``(org_id, user_id, assistant_id, "tokens")``.
+    """
     if tokens is None:
         return
 
@@ -133,19 +179,15 @@ async def set_tokens(config: RunnableConfig, tokens: dict[str, Any] | None) -> N
     if store is None:
         return
 
-    configurable = config.get("configurable", {}) or {}
-    thread_id = configurable.get("thread_id")
-    if not thread_id:
-        return
-
-    user_id = configurable.get("owner")
-    if not user_id:
+    namespace = _build_token_namespace(config)
+    if namespace is None:
         return
 
     try:
-        await store.aput((user_id, "tokens"), "data", tokens)
+        await store.aput(namespace, _TOKEN_STORE_KEY, tokens)
     except Exception:
         # Best-effort cache; ignore storage failures.
+        logger.debug("set_tokens: store.aput failed", exc_info=True)
         return
 
 
