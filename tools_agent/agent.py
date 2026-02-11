@@ -329,7 +329,12 @@ async def graph(config: RunnableConfig):
         and cfg.mcp_config.url
         and (mcp_tokens or not cfg.mcp_config.auth_required)
     ):
-        server_url = cfg.mcp_config.url.rstrip("/") + "/mcp"
+        # Append /mcp only if the URL doesn't already end with it.
+        # External MCP servers (e.g. https://docs.langchain.com/mcp)
+        # provide the full endpoint; OAP-internal servers use a base URL
+        # where the MCP endpoint lives at <base>/mcp.
+        raw_url = cfg.mcp_config.url.rstrip("/")
+        server_url = raw_url if raw_url.endswith("/mcp") else raw_url + "/mcp"
         headers = {}
         if mcp_tokens:
             headers["Authorization"] = f"Bearer {mcp_tokens['access_token']}"
