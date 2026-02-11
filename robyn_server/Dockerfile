@@ -52,7 +52,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean
 
 # Create non-root user for security
-RUN useradd --create-home --uid 1000 appuser
+RUN useradd --create-home --uid 65532 appuser
 
 WORKDIR /app
 

@@ -1,7 +1,50 @@
 volumes:
   hf_cache:
 
+networks:
+  supabase:
+    external: true
+    name: supabase_network_immoflow-platform
+
 services:
+  robyn-server:
+    build:
+      context: .
+      dockerfile: robyn_server/Dockerfile
+    image: oap-robyn:local
+    ulimits:
+      nproc:
+        soft: 65535
+        hard: 65535
+    ports:
+      - "8081:8081"
+    env_file: .env
+    environment:
+      # Override DATABASE_URL to use Docker-internal hostname
+      - DATABASE_URL=postgresql://postgres:postgres@supabase_db_immoflow-platform:5432/postgres
+      # Override SUPABASE_URL to use Docker-internal Kong gateway
+      - SUPABASE_URL=http://supabase_kong_immoflow-platform:8000
+      # OPENAI_API_KEY and OPENAI_API_BASE are NOT overridden here so the
+      # real key from .env passes through for standard provider models
+      # (openai:gpt-4o-mini etc.). Custom/vLLM endpoint assistants pass
+      # base_url per-assistant via config.configurable.base_url.
+      - ROBYN_HOST=0.0.0.0
+      - ROBYN_PORT=8081
+      - ROBYN_WORKERS=1
+    networks:
+      - default
+      - supabase
+    depends_on:
+      ministral:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-4", "-f", "http://localhost:8081/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   embeddings:
     deploy:
       replicas: 0
@@ -132,67 +175,6 @@ services:
         max-size: "100m"
         max-file: "1"
 
-  lm-awq:
-    deploy:
-      replicas: 0 # Disabled for now since we're using lm-gguf
-    volumes:
-      - hf_cache:/.hf_cache
-    restart: no
-    image: vllm/vllm-openai:latest
-    ports:
-      - 7373:80
-    device_cgroup_rules:
-      - "c 195:* rmw"
-      - "c 236:* rmw"
-    devices:
-      - nvidia.com/gpu=all
-    environment:
-      - HUGGING_FACE_HUB_TOKEN=${HUGGINGFACEHUB_API_TOKEN:-your_hf_api_access_token}
-      - HF_HOME=/.hf_cache
-      - NVIDIA_VISIBLE_DEVICES=all
-      - VLLM_ATTENTION_BACKEND=FLASHINFER
-      - HF_HUB_ENABLE_HF_TRANSFER=1
-      - MAX_PARALLEL_LOADING_WORKERS=4
-    ipc: host
-    env_file:
-      - .env
-    command:
-      [
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "80",
-        "--model",
-        "solidrust/Mistral-7B-Instruct-v0.3-AWQ",
-        "--served-model-name",
-        "uai/lm-small",
-        "--max-model-len",
-        "4096",
-        "--max-num-batched-tokens",
-        "4096",
-        "--kv-cache-dtype",
-        "fp8",
-        "--enable-auto-tool-choice",
-        "--tool-call-parser",
-        "mistral",
-        "--chat-template",
-        "examples/tool_chat_template_mistral_parallel.jinja",
-        "--gpu-memory-utilization",
-        "0.55",
-        "--seed",
-        "4269",
-        "--max-num-seqs",
-        "1",
-        "--trust-remote-code",
-        "--enable-prefix-caching",
-        "--enable-chunked-prefill",
-      ]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://lm-awq:80/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-
   ministral:
     ulimits:
       nofile:
@@ -248,7 +230,7 @@ services:
         # "--enable-chunked-prefill",
       ]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      test: ["CMD", "curl", "-f", "http://ministral:80/health"]
       interval: 30s
       timeout: 5s
       retries: 5
