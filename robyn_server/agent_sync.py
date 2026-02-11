@@ -520,6 +520,10 @@ def _build_assistant_configurable(agent: AgentSyncData) -> dict[str, Any]:
     """
     configurable: dict[str, Any] = {}
 
+    # Org ID is required for store namespace scoping: (org_id, user_id, assistant_id, category)
+    if agent.organization_id:
+        configurable["supabase_organization_id"] = str(agent.organization_id)
+
     if agent.runtime_model_name:
         configurable["model_name"] = agent.runtime_model_name
     if agent.system_prompt is not None:

@@ -1,9 +1,9 @@
 # Goal 16: User × Agent Store Namespacing (Org-Scoped)
 
-> **Status:** ⚪ Not Started
+> **Status:** 🟡 In Progress
 > **Priority:** High
 > **Created:** 2026-02-22
-> **Branch:** TBD (e.g. `feature/user-agent-store-namespacing`)
+> **Branch:** per-task branches (see below)
 > **Depends on:** Goal 15 (Startup Agent Sync — 🟢 Tasks 01–04 merged, Task-05 tests remaining)
 
 ---
@@ -18,10 +18,14 @@ The LangGraph `Store` (`AsyncPostgresStore`) is a cross-thread key-value store p
 - There is no organization-level scoping — data from one org could theoretically be accessed by another
 - No isolation between agents for runtime-learned memories
 
-### Current Namespace Convention (Broken)
+### Current Namespace Convention (Fixed by Task-01)
 
 ```
+# BEFORE (broken — flat, no isolation):
 (user_id, "tokens")     → MCP token cache — shared across ALL agents for a user
+
+# AFTER (Task-01 — org-scoped):
+(org_id, user_id, assistant_id, "tokens")  → MCP token cache — per org × user × agent
 ```
 
 ---
@@ -153,22 +157,20 @@ The Robyn Store API (`/store/items`) uses flat string namespaces. Convention:
 
 ## Tasks
 
-### Task-01: Define Namespace Convention & Update Token Cache
+### Task-01: Define Namespace Convention & Update Token Cache — 🟢 Complete
 
-**Scope:**
-- Define canonical namespace format: `(org_id, user_id, assistant_id, category)`
-- Update `tools_agent/utils/token.py`:
-  - `get_tokens()` and `set_tokens()` use `(org_id, user_id, assistant_id, "tokens")`
-  - `org_id` sourced from configurable (injected by agent sync or run config)
-  - `assistant_id` from `config.configurable.assistant_id`
-- No backward compatibility fallback needed (greenfield)
+**PR:** [#13](https://github.com/l4b4r4b4b4/oap-langgraph-tools-agent/pull/13) | **Branch:** `feature/store-namespace-convention`
 
-**Files to modify:**
-- `tools_agent/utils/token.py` — namespace update
-
-**Prerequisite research:**
-- Check Supabase data model for organization/team/project schema (use `supabase-local-dev-server` MCP)
-- Verify `organization_id` is available in the runtime config after agent sync
+**What was done:**
+- Created `tools_agent/utils/store_namespace.py` — canonical namespace helper (single source of truth)
+  - `build_namespace()`, `extract_namespace_components()`, `NamespaceComponents` NamedTuple
+  - Category constants: `CATEGORY_TOKENS`, `CATEGORY_CONTEXT`, `CATEGORY_MEMORIES`, `CATEGORY_PREFERENCES`
+  - Special pseudo-IDs: `SHARED_USER_ID`, `GLOBAL_AGENT_ID`
+- Edited `robyn_server/agent_sync.py` — added `supabase_organization_id` to `_build_assistant_configurable()`
+  - Bridges the gap: org_id now flows from sync → configurable → graph()
+- Edited `tools_agent/utils/token.py` — token cache uses `(org_id, user_id, assistant_id, "tokens")`
+  - All 5 store operations updated, `thread_id` dependency removed
+- 550/550 tests pass, ruff clean
 
 ### Task-02: Update Robyn Store API for Structured Namespaces
 
@@ -310,6 +312,16 @@ The Robyn Store API (`/store/items`) uses flat string namespaces. Convention:
 ---
 
 ## Session Log
+
+### Session 75 (2026-02-22) — Task-01 Implemented
+
+**Completed:** Task-01 (Namespace Convention & Token Cache Update)
+- Verified Supabase schema via MCP: `organizations`, `organization_members`, `agents` confirmed
+- Identified key gap: `supabase_organization_id` was in assistant metadata but not configurable
+- Created `store_namespace.py` as single source of truth for namespace construction
+- Updated `agent_sync.py` to inject org_id into configurable
+- Updated `token.py` to use 4-component org-scoped namespace
+- PR #13 created, CI pending
 
 ### Session 74 (2026-02-22) — Goal Created
 
