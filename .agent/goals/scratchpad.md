@@ -23,6 +23,7 @@
 | 14 | Agent Persistence (Supabase/Postgres) | ⚫ Deferred | Low | 2026-02-11 |
 | 15 | Startup Agent Sync from Supabase | 🟡 In Progress | Critical | 2026-02-22 |
 | 16 | User × Agent Store Namespacing | ⚪ Not Started | High | 2026-02-22 |
+| 17 | Transition to `fractal-agents-runtime` Monorepo | ⚪ Not Started | Critical | 2026-02-11 |
 
 ---
 
@@ -63,6 +64,7 @@
 - [14-Agent-Persistence](./14-Agent-Persistence/scratchpad.md)
 - [15-Startup-Agent-Sync](./15-Startup-Agent-Sync/scratchpad.md)
 - [16-User-Agent-Store-Namespacing](./16-User-Agent-Store-Namespacing/scratchpad.md)
+- [17-Fractal-Agents-Runtime-Monorepo](./17-Fractal-Agents-Runtime-Monorepo/scratchpad.md)
 
 ---
 
