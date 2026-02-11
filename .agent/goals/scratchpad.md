@@ -17,6 +17,8 @@
 | 07 | Bun + TypeScript Runtime (LangGraph JS) | ⚪ Not Started | High | 2026-01-30 |
 | 08 | CI/CD DevOps Workflow & Feature Parity | 🟡 In Progress | Critical | 2026-02-05 |
 | 10 | SSE Messages-Tuple Protocol Compatibility | 🟡 In Progress | Critical | 2026-02-20 |
+| 11 | Package Upgrade & `create_agent` Migration | ⚪ Not Started | High | 2026-02-11 |
+| 12 | Postgres Persistence (Supabase) | ⚪ Not Started | High | 2026-02-11 |
 
 ---
 
@@ -51,6 +53,8 @@
 - [07-Bun-TypeScript-Runtime](./07-Bun-TypeScript-Runtime/scratchpad.md)
 - [08-CI-CD-Feature-Parity](./08-CI-CD-Feature-Parity/scratchpad.md)
 - [10-SSE-Messages-Tuple-Protocol](./10-SSE-Messages-Tuple-Protocol/scratchpad.md)
+- [11-Create-Agent-Migration](./11-Create-Agent-Migration/scratchpad.md)
+- [12-Postgres-Persistence](./12-Postgres-Persistence/scratchpad.md)
 
 ---
 
@@ -64,6 +68,22 @@
 ---
 
 ## Recent Activity
+
+- 2026-02-11:
+  - Goal 11: **CREATED** — Package Upgrade & `create_agent` Migration
+    - Upgrade all langchain/langgraph packages to latest (langgraph 1.0.8, langchain 1.2.10, etc.)
+    - Migrate `create_react_agent` → `create_agent` (LangChain v1 recommended API)
+    - Fix streaming node name `"agent"` → `"model"` in `streams.py`
+    - Add `langgraph-checkpoint-postgres` + `psycopg[binary,pool]` as prep for Goal 12
+    - Tasks: 01-Package-Upgrades, 02-Agent-Migration, 03-Streaming-Compatibility, 04-Testing
+  - Goal 12: **CREATED** — Postgres Persistence (Supabase)
+    - Connect LangGraph checkpointer + store to Supabase Postgres (direct connection)
+    - Replace in-memory Robyn runtime storage with Postgres-backed implementations
+    - `langgraph_server` schema for runtime tables (assistants, threads, runs, crons, store_items)
+    - `DATABASE_URL` env var config, in-memory fallback when not set
+    - Tasks: 01-Dependencies-DB-Module, 02-LangGraph-Checkpointer, 03-Robyn-Storage-Postgres, 04-Integration-Testing
+    - Depends on Goal 11 completion
+  - Priority order established: Goal 11 first (clean foundation), then Goal 12 (persistence)
 
 - 2026-02-20:
   - Goal 10: **CREATED** — SSE Messages-Tuple Protocol Compatibility

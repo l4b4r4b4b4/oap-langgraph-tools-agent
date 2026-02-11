@@ -45,5 +45,9 @@
       "command": "bunx",
       "args": ["mcp-remote", "http://127.0.0.1:54321/mcp"],
     },
+    "docs-langchain": {
+      "command": "bunx",
+      "args": ["mcp-remote", "https://docs.langchain.com/mcp"],
+    },
   },
 }
