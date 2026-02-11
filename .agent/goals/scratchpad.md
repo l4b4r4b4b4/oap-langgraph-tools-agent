@@ -73,6 +73,26 @@
 
 ## Recent Activity
 
+- 2026-02-11 (deployment & docs session — PR #10):
+  - **Docker deployment fixes**:
+    - Root-caused `resource temporarily unavailable` — container appuser UID 1000 shared host nproc quota (4131/4096 threads)
+    - Fixed: Dockerfile UID 1000 → 65532, added `ulimits.nproc: 65535` to compose
+    - Removed `OPENAI_API_KEY=EMPTY` and `OPENAI_API_BASE` env overrides that blocked standard provider models
+    - Removed unused `lm-awq` service from compose
+  - **MCP external server support**:
+    - Fixed agent.py: don't append `/mcp` if URL already ends with it
+    - Tested with `https://docs.langchain.com/mcp` — MCP protocol v2025-06-18 negotiated successfully
+  - **E2E verified (full Docker stack)**:
+    - Supabase auth → create assistant → create thread → stream run ✅
+    - OpenAI `gpt-4o-mini` + LangChain docs MCP → tool call + streamed response ✅
+    - Ministral 3B (vLLM) basic chat ✅ (MCP tool results fail on vLLM due to stricter content block validation)
+    - Postgres persistence + Langfuse tracing confirmed ✅
+    - All `/info` capabilities true
+  - **Documentation**: Created `docs/NEXTJS_INTEGRATION.md` — Next.js 16 + Bun 1.3 integration guide
+    - Auth, SDK client, streaming hook, chat component, Server Actions, MCP config, model config, Docker deployment, troubleshooting
+  - **PR #10 created** (`fix/docker-mcp-nextjs-docs`), CI passing, ready to merge
+  - **Known issue**: vLLM rejects MCP tool results with structured content blocks (LangChain adds `id` fields vLLM doesn't accept). Use OpenAI/Anthropic for MCP+tool workflows.
+
 - 2026-02-11 (implementation session — Goals 02+03 combined):
   - **Goals 02+03: COMPLETE** — LangSmith disabled + Langfuse tracing integrated
     - Created `tools_agent/tracing.py` — Langfuse lifecycle (init, shutdown, callback handler factory, `inject_tracing()`)
