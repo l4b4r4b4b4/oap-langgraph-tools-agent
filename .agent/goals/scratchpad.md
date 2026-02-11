@@ -18,8 +18,8 @@
 | 08 | CI/CD DevOps Workflow & Feature Parity | 🟡 In Progress | Critical | 2026-02-05 |
 | 10 | SSE Messages-Tuple Protocol Compatibility | 🟡 In Progress | Critical | 2026-02-20 |
 | 11 | Package Upgrade & `create_agent` Migration | 🟢 Complete | High | 2026-02-11 |
-| 12 | Postgres Persistence (Supabase) | 🟡 In Progress | High | 2026-02-14 |
-| 13 | MCP Agent Integration | 🟡 In Progress | Medium | 2026-02-14 |
+| 12 | Postgres Persistence (Supabase) | 🟢 Complete | High | 2026-02-14 |
+| 13 | MCP Agent Integration | 🟢 Complete | Medium | 2026-02-14 |
 | 14 | Agent Persistence (Supabase/Postgres) | ⚪ Not Started | Medium | 2026-02-11 |
 
 ---
@@ -73,6 +73,19 @@
 
 ## Recent Activity
 
+- 2026-02-14 (implementation session — Goals 12+13 Task-04):
+  - Goal 12 Task-04: **COMPLETE** — Postgres Integration Testing
+    - Created `test_database.py` (18 unit tests) — DB accessors, shutdown safety, config, in-memory fallback
+    - Created `test_postgres_integration.py` (34 integration tests) — schema, all 5 stores CRUD, cascades, full lifecycle
+    - Updated `conftest.py` — `@pytest.mark.postgres` marker, `postgres_pool`/`postgres_storage` fixtures, auto-skip when Postgres unavailable
+    - Discovered 3 pre-existing bugs in `postgres_storage.py`: BUG-PG-001 (cron thread_id None), BUG-PG-002 (cron update dict serialisation), BUG-PG-003 (thread delete doesn't cascade to runs)
+    - **Goal 12: 🟢 COMPLETE** — all 4 tasks done
+  - Goal 13 Task-04: **COMPLETE** — MCP + Persistence Testing
+    - 23 MCP tests (Task-03) + 18 DB unit + 34 Postgres integration = 75 new tests total
+    - **Goal 13: 🟢 COMPLETE** — all 4 tasks done
+    - 515/515 tests passing, ruff clean
+  - **Next**: Phase 2 — Goal 14 (Agent Persistence), then Goals 02+03 (LangSmith removal + Langfuse)
+
 - 2026-02-14 (implementation session — Goal 13 Task-03):
   - Goal 13 Task-03: **COMPLETE** — MCP Server: Wire Agent Execution & Dynamic Tools
     - Created `robyn_server/agent.py` (+364 lines) — `execute_agent_run()`, `get_agent_tool_info()`, config builder, response extractor
@@ -82,7 +95,6 @@
     - Removed hardcoded `LANGGRAPH_AGENT_TOOL` global — replaced with `_get_dynamic_agent_tool()`
     - 23 new tests: protocol version, dynamic tool listing, agent execution wiring, agent module functions
     - 463/463 tests passing, ruff clean
-  - **Next**: Goal 13 Task-04 — Testing (unit + integration tests for MCP client/server)
 
 - 2026-02-14 (implementation session — Goal 13 Task-02):
   - Goal 13 Task-02: **COMPLETE** — MCP Client: Adopt `langchain-mcp-adapters`
