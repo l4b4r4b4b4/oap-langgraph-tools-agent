@@ -347,13 +347,35 @@ async def get_agent_tool_info(
         # Model name
         info["model_name"] = configurable.get("model_name")
 
-        # MCP tools
+        # MCP tools (multi-server MCP config)
         mcp_config = configurable.get("mcp_config")
         if isinstance(mcp_config, dict):
-            info["mcp_url"] = mcp_config.get("url")
-            tools = mcp_config.get("tools")
-            if isinstance(tools, list):
-                info["mcp_tools"] = [str(tool_name) for tool_name in tools]
+            servers = mcp_config.get("servers")
+
+            # New shape: {"servers": [{"name": "..", "url": "..", "tools": [...]} ...]}
+            if isinstance(servers, list):
+                mcp_urls: list[str] = []
+                mcp_tool_names: list[str] = []
+
+                for server in servers:
+                    if not isinstance(server, dict):
+                        continue
+
+                    url_value = server.get("url")
+                    if isinstance(url_value, str) and url_value:
+                        mcp_urls.append(url_value)
+
+                    tools_value = server.get("tools")
+                    if isinstance(tools_value, list):
+                        mcp_tool_names.extend(
+                            str(tool_name) for tool_name in tools_value
+                        )
+
+                # Preserve backward-compatible output schema of this introspection:
+                # - info["mcp_url"] remains a single string (first URL) or None
+                # - info["mcp_tools"] remains a flat list of tool names
+                info["mcp_url"] = mcp_urls[0] if mcp_urls else None
+                info["mcp_tools"] = sorted(set(mcp_tool_names))
 
         # RAG collections
         rag_config = configurable.get("rag")

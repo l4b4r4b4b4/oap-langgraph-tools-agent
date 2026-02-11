@@ -17,9 +17,11 @@ from tools_agent.tracing import (
     shutdown_langfuse,
 )
 
+from robyn_server.agent_sync import parse_agent_sync_scope, startup_agent_sync
 from robyn_server.auth import auth_middleware
 from robyn_server.config import get_config
 from robyn_server.database import (
+    get_pool,
     initialize_database,
     is_postgres_enabled,
     shutdown_database,
@@ -42,6 +44,7 @@ from robyn_server.routes.a2a import register_a2a_routes
 from robyn_server.routes.mcp import register_mcp_routes
 from robyn_server.routes.metrics import register_metrics_routes
 from robyn_server.routes.store import register_store_routes
+from robyn_server.storage import get_storage
 
 logger = logging.getLogger(__name__)
 
@@ -68,9 +71,9 @@ app = Robyn(__file__, openapi=openapi)
 
 @app.startup_handler
 async def on_startup() -> None:
-    """Initialise Postgres persistence and Langfuse tracing."""
-    result = await initialize_database()
-    if result:
+    """Initialise Postgres persistence, Langfuse tracing, and optional agent sync."""
+    database_enabled = await initialize_database()
+    if database_enabled:
         logger.info("Robyn startup: Postgres persistence enabled")
     else:
         logger.info("Robyn startup: running with in-memory storage")
@@ -79,6 +82,57 @@ async def on_startup() -> None:
         logger.info("Robyn startup: Langfuse tracing enabled")
     else:
         logger.info("Robyn startup: Langfuse tracing disabled (not configured)")
+
+    # -----------------------------------------------------------------------
+    # Optional startup agent sync (warm cache)
+    #
+    # Production default: AGENT_SYNC_SCOPE=none (lazy sync only).
+    # Dev testing:        AGENT_SYNC_SCOPE=all
+    # -----------------------------------------------------------------------
+    if not is_postgres_enabled():
+        logger.info("Robyn startup: agent sync skipped (Postgres not enabled)")
+        return
+
+    pool = get_pool()
+    if pool is None:
+        logger.info("Robyn startup: agent sync skipped (pool not available)")
+        return
+
+    # Read scope from environment via parser to avoid coupling app to config changes.
+    import os
+
+    try:
+        scope = parse_agent_sync_scope(os.getenv("AGENT_SYNC_SCOPE", "none"))
+    except ValueError as scope_error:
+        logger.warning(
+            "Robyn startup: invalid AGENT_SYNC_SCOPE; skipping startup sync. error=%s",
+            scope_error,
+        )
+        return
+
+    if scope.type == "none":
+        logger.info("Robyn startup: agent sync disabled (AGENT_SYNC_SCOPE=none)")
+        return
+
+    try:
+        storage = get_storage()
+        summary = await startup_agent_sync(
+            pool,
+            storage,
+            scope=scope,
+            owner_id="system",
+        )
+        logger.info(
+            "Robyn startup: agent sync complete total=%d created=%d updated=%d skipped=%d failed=%d",
+            summary.get("total", 0),
+            summary.get("created", 0),
+            summary.get("updated", 0),
+            summary.get("skipped", 0),
+            summary.get("failed", 0),
+        )
+    except Exception as sync_error:
+        # Non-fatal: the server should still start even if sync fails.
+        logger.exception("Robyn startup: agent sync failed (non-fatal): %s", sync_error)
 
 
 @app.shutdown_handler

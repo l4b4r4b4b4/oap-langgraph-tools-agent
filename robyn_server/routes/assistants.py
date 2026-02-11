@@ -11,12 +11,15 @@ Implements LangGraph-compatible endpoints:
 
 import json
 import logging
+import os
 from typing import Any
+from uuid import UUID
 
 from pydantic import ValidationError
 from robyn import Request, Response, Robyn
 
 from robyn_server.auth import AuthenticationError, require_user
+from robyn_server.database import get_pool, is_postgres_enabled
 from robyn_server.models import (
     AssistantCountRequest,
     AssistantCreate,
@@ -57,6 +60,44 @@ def register_assistant_routes(app: Robyn) -> None:
             return error_response(str(e), 422)
 
         storage = get_storage()
+
+        # -------------------------------------------------------------------
+        # Dev-gated lazy sync (Option B)
+        #
+        # If the client provides Supabase agent metadata, attempt to sync that
+        # agent into assistant storage before doing the normal create flow.
+        #
+        # Safety:
+        # - Gated behind ROBYN_DEV=true to avoid tenant/auth mistakes while the
+        #   DB connection may bypass RLS.
+        # - Best-effort: failures do not block the assistant create endpoint.
+        # -------------------------------------------------------------------
+        try:
+            if os.getenv("ROBYN_DEV", "false").lower() in ("true", "1", "yes"):
+                metadata = create_data.metadata or {}
+                supabase_agent_id_value = (
+                    metadata.get("supabase_agent_id")
+                    if isinstance(metadata, dict)
+                    else None
+                )
+                if isinstance(supabase_agent_id_value, str) and supabase_agent_id_value:
+                    pool = get_pool()
+                    if is_postgres_enabled() and pool is not None:
+                        from robyn_server.agent_sync import lazy_sync_agent
+
+                        try:
+                            supabase_agent_id = UUID(supabase_agent_id_value)
+                            await lazy_sync_agent(
+                                pool,
+                                storage,
+                                agent_id=supabase_agent_id,
+                                owner_id=user.identity,
+                            )
+                        except ValueError:
+                            # Invalid UUID in metadata; ignore.
+                            pass
+        except Exception as sync_error:
+            logger.warning("Dev lazy sync skipped due to error: %s", sync_error)
 
         # Check if assistant_id provided and if_exists handling
         if create_data.assistant_id:
