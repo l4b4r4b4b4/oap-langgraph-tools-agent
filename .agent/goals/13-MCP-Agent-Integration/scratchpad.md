@@ -203,7 +203,7 @@ Translation logic: if `url` is set and `servers` is None, create `{"default": MC
 |---------|-------------|--------|------------|-------------------------|
 | Task-01 | Research — LangChain MCP support, assess current code | 🟢 Complete | - | 0 (this scratchpad) |
 | Task-02 | MCP Client — adopt `langchain-mcp-adapters`, refactor `graph()` | 🟢 Complete | Task-01 | -129/+148 (dep added, agent.py refactored, tools.py slimmed, interceptor created) |
-| Task-03 | MCP Server — wire `execute_agent_run`, fix tools/call | ⚪ | Task-01 | ~200 (create robyn_server/agent.py, update handlers.py) |
+| Task-03 | MCP Server — wire `execute_agent_run`, fix tools/call | 🟢 Complete | Task-01 | +364 (robyn_server/agent.py), handlers.py refactored, schemas.py bumped, +23 tests |
 | Task-04 | Testing — unit + integration tests for both sides | ⚪ | Task-02, Task-03 | ~300 (new test files) |
 
 ### Task-02 Detail: MCP Client Improvements
@@ -228,23 +228,28 @@ Translation logic: if `url` is set and `servers` is None, create `{"default": MC
 5. ✅ All 440 existing tests pass (mcp bumped 1.9.1 → 1.26.0)
 6. ⬜ Manual E2E test with live MCP server (deferred — no MCP server running locally)
 
-### Task-03 Detail: MCP Server Completion
+### Task-03 Detail: MCP Server Completion ✅
 
-**Goal**: Wire `tools/call` to actual agent execution
+**Goal**: Wire `tools/call` to actual agent execution — **COMPLETE**
 
-1. Create `robyn_server/agent.py`:
-   - Extract agent execution logic from `robyn_server/streams.py`
-   - `execute_agent_run(message, thread_id, assistant_id)` → result dict
-   - Uses `graph()` factory, creates/reuses thread, invokes agent
-   - Returns final AI message content
-2. Update `robyn_server/mcp/handlers.py`:
-   - `_execute_agent()` now imports from real `robyn_server.agent`
-   - Remove placeholder fallback
-3. Dynamic tool listing:
-   - `_handle_tools_list()` reflects actual agent capabilities
-   - Load tool names from graph config (MCP sub-tools, RAG collections)
-4. (Deferred) SSE streaming — keep GET as 405 for now, add in future goal
-5. Update `PROTOCOL_VERSION` to `2025-03-26`
+1. ✅ Created `robyn_server/agent.py` (364 lines):
+   - `execute_agent_run(message, thread_id, assistant_id, owner_id)` → str
+   - `get_agent_tool_info(assistant_id, owner_id)` → dict (introspects assistant config)
+   - `_build_mcp_runnable_config()` — self-contained config builder (no cross-module coupling)
+   - `_extract_response_text()` — extracts last AI message content from agent result
+   - Handles: assistant lookup, thread create/reuse, agent build via `graph()`, `ainvoke()`, state persistence
+   - All imports lazy (inside functions) to avoid circular deps
+2. ✅ Updated `robyn_server/mcp/handlers.py`:
+   - `_execute_agent()` delegates directly to `execute_agent_run()` (no `ImportError` fallback)
+   - `_handle_tools_list()` → dynamic via `_get_dynamic_agent_tool()` + `get_agent_tool_info()`
+   - `_build_tool_description()` — includes MCP sub-tools, RAG collections, model name
+   - Removed hardcoded `LANGGRAPH_AGENT_TOOL` global
+   - All f-string logging replaced with lazy `%s` formatting
+3. ✅ Updated `robyn_server/mcp/schemas.py`:
+   - Default `protocol_version` in `McpInitializeResult` bumped to `"2025-03-26"`
+4. ✅ `PROTOCOL_VERSION` updated to `"2025-03-26"`
+5. ✅ 23 new tests added (463/463 total passing)
+6. (Deferred) SSE streaming — keep GET as 405 for now, add in future goal
 
 ### Task-04 Detail: Testing
 
@@ -263,12 +268,12 @@ Translation logic: if `url` is set and `servers` is None, create `{"default": MC
 - [ ] MCP client: support multiple MCP servers per agent (additive, needs OAP UI changes)
 - [x] MCP client: auth handled via interceptors (`handle_interaction_required`)
 - [x] MCP client: graceful degradation with clear error messages per server
-- [ ] MCP server: `tools/call` wired to actual agent execution via `graph()`
-- [ ] MCP server: dynamic tool listing that reflects agent's actual capabilities
-- [ ] MCP server: proper integration with Supabase auth context
-- [ ] All 440 existing tests pass
-- [ ] New tests for MCP client (MultiServerMCPClient integration)
-- [ ] New tests for MCP server (execute_agent_run)
+- [x] MCP server: `tools/call` wired to actual agent execution via `graph()`
+- [x] MCP server: dynamic tool listing that reflects agent's actual capabilities
+- [ ] MCP server: proper integration with Supabase auth context (deferred — needs auth middleware for MCP routes)
+- [x] All 463 tests pass (440 original + 23 new)
+- [ ] New tests for MCP client (MultiServerMCPClient integration) — Task-04
+- [x] New tests for MCP server (execute_agent_run, dynamic tools, protocol version)
 
 ## Current State
 
@@ -284,17 +289,19 @@ Translation logic: if `url` is set and `servers` is None, create `{"default": MC
 5. Auth: optional Supabase token → MCP OAuth token exchange via `/oauth/token`
 6. Errors silently swallowed with `logger.warning`
 
-### MCP Server (agent exposed as MCP server)
+### MCP Server (agent exposed as MCP server) — ✅ Task-03 Complete
 
-**Location**: `robyn_server/mcp/handlers.py`, `robyn_server/mcp/schemas.py`, `robyn_server/routes/mcp.py`
+**Location**: `robyn_server/agent.py`, `robyn_server/mcp/handlers.py`, `robyn_server/mcp/schemas.py`, `robyn_server/routes/mcp.py`
 
-**How it works today**:
+**How it works now** (after Task-03):
 1. Robyn registers POST/GET/DELETE `/mcp/` routes
 2. `McpMethodHandler` implements JSON-RPC 2.0 for `initialize`, `tools/list`, `tools/call`, `ping`
-3. Exposes a single hardcoded `langgraph_agent` tool
-4. `tools/call` tries to import `robyn_server.agent.execute_agent_run` — **this module doesn't exist** (falls back to placeholder)
-5. No streaming support (GET returns 405)
-6. Stateless — no session management
+3. `tools/list` dynamically builds tool description from assistant config (MCP sub-tools, RAG, model)
+4. `tools/call` delegates to `robyn_server.agent.execute_agent_run()` — real agent execution
+5. `execute_agent_run()` handles: assistant lookup, thread create/reuse, `graph()` build, `ainvoke()`, state persistence
+6. Protocol version: `2025-03-26` (Streamable HTTP Transport)
+7. No streaming support (GET returns 405) — deferred
+8. Stateless — no session management
 
 ## Architecture Considerations
 
@@ -398,10 +405,10 @@ This is essentially what `execute_run_stream` does in `streams.py` but non-strea
 - `tools_agent/utils/mcp_interceptors.py` — **NEW** `handle_interaction_required` interceptor (+126 lines) ✅
 - `tools_agent/utils/token.py` — unchanged (called before `MultiServerMCPClient`, works as-is)
 
-### Task-03: MCP Server
-- `robyn_server/agent.py` — **NEW** — shared agent execution logic
-- `robyn_server/mcp/handlers.py` — wire `_execute_agent`, dynamic tools
-- `robyn_server/mcp/schemas.py` — minor updates if needed
+### Task-03: MCP Server ✅
+- `robyn_server/agent.py` — **NEW** (+364 lines) — `execute_agent_run()`, `get_agent_tool_info()`, config builder, response extractor
+- `robyn_server/mcp/handlers.py` — dynamic tools, real execution wiring, protocol bump, logging cleanup
+- `robyn_server/mcp/schemas.py` — default protocol version bumped to `"2025-03-26"`
 
 ### Task-04: Testing
 - `robyn_server/tests/test_mcp_client.py` — **NEW** — MultiServerMCPClient integration tests
@@ -441,9 +448,9 @@ This is essentially what `execute_run_stream` does in `streams.py` but non-strea
 
 ### Open Questions
 
-- [ ] Should the MCP server expose individual sub-tools or just the top-level agent? (Task-03 will decide)
+- [x] Should the MCP server expose individual sub-tools or just the top-level agent? **RESOLVED (Task-03)**: Expose top-level `langgraph_agent` with dynamic description listing sub-tools. Individual sub-tool exposure deferred — unclear benefit, high complexity.
 - [ ] What's the latency impact of per-call MCP connections to cluster FastMCP services? (Measure after Task-02)
 - [ ] Should stateful sessions be used by default for FastMCP cluster services? (Depends on whether MCP servers maintain session state)
 - [ ] Should MCP server support SSE streaming? (Deferred — keep GET as 405 for now)
-- [ ] How should MCP auth interact with Supabase JWT — pass-through or separate? (Task-02 interceptor design)
+- [x] How should MCP auth interact with Supabase JWT — pass-through or separate? **RESOLVED (Task-02)**: Interceptor handles `interaction_required` errors with clean `ToolException`. Supabase JWT pass-through for MCP server routes deferred.
 - [ ] How are MCP server URLs configured in cluster deployments — env vars per service, or a discovery mechanism?

@@ -73,6 +73,17 @@
 
 ## Recent Activity
 
+- 2026-02-14 (implementation session — Goal 13 Task-03):
+  - Goal 13 Task-03: **COMPLETE** — MCP Server: Wire Agent Execution & Dynamic Tools
+    - Created `robyn_server/agent.py` (+364 lines) — `execute_agent_run()`, `get_agent_tool_info()`, config builder, response extractor
+    - Wired `tools/call` to real agent execution via `execute_agent_run()` (removed placeholder fallback)
+    - `tools/list` now dynamically built from assistant config (MCP sub-tools, RAG collections, model name)
+    - `PROTOCOL_VERSION` bumped `"2024-11-05"` → `"2025-03-26"` (handlers + schemas)
+    - Removed hardcoded `LANGGRAPH_AGENT_TOOL` global — replaced with `_get_dynamic_agent_tool()`
+    - 23 new tests: protocol version, dynamic tool listing, agent execution wiring, agent module functions
+    - 463/463 tests passing, ruff clean
+  - **Next**: Goal 13 Task-04 — Testing (unit + integration tests for MCP client/server)
+
 - 2026-02-14 (implementation session — Goal 13 Task-02):
   - Goal 13 Task-02: **COMPLETE** — MCP Client: Adopt `langchain-mcp-adapters`
     - Added `langchain-mcp-adapters>=0.2.1` dependency (`mcp` bumped 1.9.1 → 1.26.0)
