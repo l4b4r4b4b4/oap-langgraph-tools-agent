@@ -9,8 +9,8 @@
 | ID | Goal Name | Status | Priority | Last Updated |
 |----|-----------|--------|----------|--------------|
 | 01 | Repo scaffolding (flake.nix + .rules + branch protection + CI/CD to GHCR) | 🟢 Complete | Critical | 2026-01-27 |
-| 02 | Remove LangSmith dependency and integration code | 🟡 In Progress | High | 2026-01-27 |
-| 03 | Add Langfuse tracing (replace LangSmith tracing path) | ⚪ Not Started | High | - |
+| 02 | Remove LangSmith dependency and integration code | 🟢 Complete | High | 2026-02-11 |
+| 03 | Add Langfuse tracing (replace LangSmith tracing path) | 🟢 Complete | High | 2026-02-11 |
 | 04 | Supabase development stack integration | 🟡 In Progress | High | 2026-01-27 |
 | 05 | OpenAI-compatible LLM integration (vLLM) | 🟢 Complete | Critical | 2026-01-30 |
 | 06 | Robyn Runtime Server (LangGraph API parity) | 🟢 Complete | Critical | 2026-02-05 |
@@ -20,7 +20,7 @@
 | 11 | Package Upgrade & `create_agent` Migration | 🟢 Complete | High | 2026-02-11 |
 | 12 | Postgres Persistence (Supabase) | 🟢 Complete | High | 2026-02-14 |
 | 13 | MCP Agent Integration | 🟢 Complete | Medium | 2026-02-14 |
-| 14 | Agent Persistence (Supabase/Postgres) | ⚪ Not Started | Medium | 2026-02-11 |
+| 14 | Agent Persistence (Supabase/Postgres) | ⚫ Deferred | Low | 2026-02-11 |
 
 ---
 
@@ -72,6 +72,23 @@
 ---
 
 ## Recent Activity
+
+- 2026-02-11 (implementation session — Goals 02+03 combined):
+  - **Goals 02+03: COMPLETE** — LangSmith disabled + Langfuse tracing integrated
+    - Created `tools_agent/tracing.py` — Langfuse lifecycle (init, shutdown, callback handler factory, `inject_tracing()`)
+    - `LANGCHAIN_TRACING_V2` defaults to `"false"` at import time (LangSmith disabled unless explicit override)
+    - Langfuse `CallbackHandler` injected at both invocation paths:
+      - Streaming: `robyn_server/routes/streams.py` → `execute_run_stream()` with `trace_name="agent-stream"`
+      - Non-streaming: `robyn_server/agent.py` → `execute_agent_run()` with `trace_name="mcp-invoke"`
+    - Trace metadata: `langfuse_user_id` (owner), `langfuse_session_id` (thread), `langfuse_tags` (path-specific)
+    - Startup/shutdown wired in `robyn_server/app.py` (`initialize_langfuse()` / `shutdown_langfuse()`)
+    - `/info` endpoint includes `"tracing": is_langfuse_enabled()` capability flag
+    - Added `langfuse>=3.14.1` dependency
+    - 35 new tracing tests (`test_tracing.py`) — config detection, lifecycle, injection, graceful degradation
+    - Removed `.agent/tmp/test_langsmith_startup.py`, `test_runtime.py`, `test_runtime_langsmith.py`
+    - 550/550 tests passing, ruff clean
+  - **Goal 14: DEFERRED** — single graph factory works fine with assistant configs; agent registry is premature abstraction until multiple graph types exist
+  - **PR #8 merged** — Goals 10–13 squash-merged to `main` (`f6b38e6`)
 
 - 2026-02-14 (implementation session — Goals 12+13 Task-04):
   - Goal 12 Task-04: **COMPLETE** — Postgres Integration Testing

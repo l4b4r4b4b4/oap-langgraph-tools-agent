@@ -9,6 +9,14 @@ import logging
 from robyn import Robyn
 from robyn.openapi import OpenAPI, OpenAPIInfo
 
+# Import tracing module early so LANGCHAIN_TRACING_V2 is set before
+# any LangChain code is loaded.
+from tools_agent.tracing import (
+    initialize_langfuse,
+    is_langfuse_enabled,
+    shutdown_langfuse,
+)
+
 from robyn_server.auth import auth_middleware
 from robyn_server.config import get_config
 from robyn_server.database import (
@@ -60,19 +68,25 @@ app = Robyn(__file__, openapi=openapi)
 
 @app.startup_handler
 async def on_startup() -> None:
-    """Initialise Postgres persistence (if DATABASE_URL is configured)."""
+    """Initialise Postgres persistence and Langfuse tracing."""
     result = await initialize_database()
     if result:
         logger.info("Robyn startup: Postgres persistence enabled")
     else:
         logger.info("Robyn startup: running with in-memory storage")
 
+    if initialize_langfuse():
+        logger.info("Robyn startup: Langfuse tracing enabled")
+    else:
+        logger.info("Robyn startup: Langfuse tracing disabled (not configured)")
+
 
 @app.shutdown_handler
 async def on_shutdown() -> None:
-    """Close the Postgres connection pool gracefully."""
+    """Close the Postgres connection pool and Langfuse client gracefully."""
+    shutdown_langfuse()
     await shutdown_database()
-    logger.info("Robyn shutdown: database resources released")
+    logger.info("Robyn shutdown: database and tracing resources released")
 
 
 # Register authentication middleware using decorator pattern
@@ -189,6 +203,7 @@ async def info() -> dict:
             "mcp": True,  # MCP endpoints implemented
             "metrics": True,  # Prometheus metrics available
             "persistence": is_postgres_enabled(),  # Postgres persistence
+            "tracing": is_langfuse_enabled(),  # Langfuse tracing
         },
         # Available agent graphs
         "graphs": ["agent"],

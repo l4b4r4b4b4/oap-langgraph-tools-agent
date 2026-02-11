@@ -25,6 +25,8 @@ from typing import Any
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 
+from tools_agent.tracing import inject_tracing
+
 logger = logging.getLogger(__name__)
 
 # Default owner ID for unauthenticated MCP access.
@@ -222,6 +224,15 @@ async def execute_agent_run(
         assistant_id=assistant_id,
         assistant_config=assistant_config,
         owner_id=owner_id,
+    )
+
+    # Inject Langfuse tracing (no-op if not configured)
+    runnable_config = inject_tracing(
+        runnable_config,
+        user_id=owner_id,
+        session_id=thread_id,
+        trace_name="mcp-invoke",
+        tags=["robyn", "mcp"],
     )
 
     logger.info(
