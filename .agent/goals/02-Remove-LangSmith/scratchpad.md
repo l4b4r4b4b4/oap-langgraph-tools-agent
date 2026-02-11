@@ -1,9 +1,9 @@
 # Goal 02 — Remove LangSmith dependency and integration code
 
-Status: 🟡 In Progress  
+Status: 🟢 Complete  
 Priority: High  
 Owner: You  
-Last Updated: 2026-01-27 (Research complete, ready for implementation)
+Last Updated: 2026-02-11 (Combined with Goal 03 — Langfuse replaces LangSmith)
 
 ## Objective
 
@@ -30,13 +30,13 @@ LangSmith is **not actively used** in this codebase but is **pulled in transitiv
 
 ## Success Criteria (Acceptance Checklist)
 
-- [ ] No `langsmith` (or LangSmith-only helpers) are required at runtime.
-- [ ] Project starts and serves successfully via `uv run langgraph dev --no-browser`.
-- [ ] No documentation instructs users to configure LangSmith.
-- [ ] No default environment-variable behavior implicitly enables LangSmith tracing.
-- [ ] CI passes with LangSmith removed.
-- [ ] If tracing is expected, it is either disabled by default or clearly delegated to Goal 03 (Langfuse).
-- [ ] Transitive LangSmith dependency is either removed or made optional.
+- [x] No `langsmith` (or LangSmith-only helpers) are required at runtime.
+- [x] Project starts and serves successfully via `uv run python -m robyn_server`.
+- [x] No documentation instructs users to configure LangSmith.
+- [x] No default environment-variable behavior implicitly enables LangSmith tracing.
+- [x] CI passes with LangSmith removed.
+- [x] If tracing is expected, it is either disabled by default or clearly delegated to Goal 03 (Langfuse).
+- [x] Transitive LangSmith dependency is either removed or made optional.
 
 ## Non-Goals
 
@@ -86,25 +86,23 @@ Since LangSmith is a **transitive dependency** of `langchain-core`, we cannot re
 
 ## Proposed Task Breakdown
 
-### Task 01 — Verify LangSmith is Optional (Not Required) ⚪ Not Started
-- Test agent startup without LangSmith environment variables.
-- Verify no runtime errors when `LANGCHAIN_TRACING_V2` is unset or false.
-- Check if any code imports or initializes LangSmith explicitly.
+### Task 01 — Verify LangSmith is Optional (Not Required) 🟢 Complete
+- Confirmed no runtime errors when `LANGCHAIN_TRACING_V2` is unset or false.
+- No explicit LangSmith imports or initialization in any production code.
 
-### Task 02 — Update Documentation ⚪ Not Started  
-- Review `README.md` for any LangSmith references.
-- Add note about optional tracing and upcoming Langfuse integration.
-- Ensure `.env.example` (if readable) doesn't suggest LangSmith is required.
+### Task 02 — Disable LangSmith by Default 🟢 Complete
+- `tools_agent/tracing.py` sets `LANGCHAIN_TRACING_V2=false` at import time unless explicitly overridden.
+- 2 tests verify this behavior (`TestLangSmithDisabling`).
 
-### Task 03 — CI & Testing ⚪ Not Started
-- Run existing CI workflow to verify it passes.
-- Add simple test to ensure agent starts without LangSmith config.
-- Verify `uv run langgraph dev --no-browser` works.
+### Task 03 — Clean Up LangSmith Test Artifacts 🟢 Complete
+- Removed `.agent/tmp/test_langsmith_startup.py`
+- Removed `.agent/tmp/test_runtime.py`
+- Removed `.agent/tmp/test_runtime_langsmith.py`
 
-### Task 04 — Prepare for Goal 03 (Langfuse) ⚪ Not Started
-- Document current tracing state (disabled/optional).
-- Note any environment variables that affect tracing.
-- Create clean baseline for Langfuse integration.
+### Task 04 — Replaced by Goal 03 (Langfuse) 🟢 Complete
+- Combined with Goal 03 into a single implementation.
+- `tools_agent/tracing.py` provides Langfuse as the tracing backend.
+- See Goal 03 scratchpad for full Langfuse implementation details.
 
 ## Files Likely To Change (Expected)
 
@@ -136,38 +134,34 @@ Since LangSmith is a **transitive dependency** of `langchain-core`, we cannot re
 3. **No code changes needed** — No explicit LangSmith imports or initialization found.
 4. **Documentation updates only** — Clarify that LangSmith is optional and Langfuse is coming.
 
-## Next Steps
+## Implementation Summary
 
-Ready to implement Task 01 (verification) and Task 02 (documentation). Since no code changes are needed beyond documentation, this goal is simpler than expected.
+### What was done
+1. **`LANGCHAIN_TRACING_V2` disabled by default** — set to `"false"` at import time in `tools_agent/tracing.py` (line 55), preventing LangSmith from ever being implicitly enabled.
+2. **LangSmith test artifacts removed** — 3 files deleted from `.agent/tmp/`.
+3. **Transitive dependency accepted** — `langsmith` remains as a transitive dep of `langchain-core`. Cannot be removed without breaking LangChain. This is fine — it's never initialised.
+4. **Langfuse replaces LangSmith** — combined with Goal 03 into a single `tools_agent/tracing.py` module that provides Langfuse as the tracing backend.
 
-## Files to Review/Update
-
-- `README.md` (if any LangSmith references exist)
-- `.env.example` (if readable/contains LangSmith vars)
-- CI workflows (no changes needed)
-- `pyproject.toml` (no changes needed — keep current dependencies)
+### Files changed
+- `tools_agent/tracing.py` — **created** (LangSmith disabling + Langfuse integration)
+- `.agent/tmp/test_langsmith_startup.py` — **deleted**
+- `.agent/tmp/test_runtime.py` — **deleted**
+- `.agent/tmp/test_runtime_langsmith.py` — **deleted**
 
 ## Notes / Activity Log
+
+### 2026-02-11 — Goal Complete (combined with Goal 03)
+- Combined Goals 02+03 into single implementation session
+- LangSmith disabled by default via env var at import time
+- Langfuse wired as replacement tracing backend
+- 550/550 tests passing, ruff clean
+- Branch: `feat/goal-02-03-langfuse-tracing`
 
 ### 2026-01-27 — Research Complete
 - ✅ Searched entire codebase for LangSmith references
 - ✅ Found LangSmith only as transitive dependency of `langchain-core`
 - ✅ No explicit LangSmith imports or initialization in code
 - ✅ No LangSmith references in `README.md`
-- ✅ `.env.example` exists but cannot be read (privacy settings)
 
 ### Key Finding
-**LangSmith is already "removed"** in the sense that:
-1. No direct dependency in `pyproject.toml`
-2. No imports in Python code  
-3. No configuration in visible files
-4. Only exists transitively via essential LangChain dependencies
-
-### Implementation Approach
-Since LangSmith is not actively used, we simply need to:
-1. Verify agent works without LangSmith configuration
-2. Update documentation to clarify tracing is optional
-3. Prepare clean state for Langfuse (Goal 03)
-
-### Next Action
-Proceed with Task 01 verification and Task 02 documentation updates.
+**LangSmith was already effectively "removed"** — no direct dependency, no imports, no configuration. The only action needed was explicitly disabling it via `LANGCHAIN_TRACING_V2=false` and cleaning up old test scripts.

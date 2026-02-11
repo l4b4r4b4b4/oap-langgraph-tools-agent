@@ -31,6 +31,7 @@ from robyn_server.routes.sse import (
 )
 from robyn_server.storage import get_storage
 from tools_agent.agent import graph as build_agent_graph
+from tools_agent.tracing import inject_tracing
 
 logger = logging.getLogger(__name__)
 
@@ -598,6 +599,15 @@ async def execute_run_stream(
         assistant_config=assistant_config,
         run_config=config,
         owner_id=owner_id,
+    )
+
+    # 3b. Inject Langfuse tracing (no-op if not configured)
+    runnable_config = inject_tracing(
+        runnable_config,
+        user_id=owner_id,
+        session_id=thread_id,
+        trace_name="agent-stream",
+        tags=["robyn", "streaming"],
     )
 
     # 4. Build and invoke the agent graph
