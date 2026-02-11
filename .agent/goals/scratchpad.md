@@ -21,6 +21,8 @@
 | 12 | Postgres Persistence (Supabase) | 🟢 Complete | High | 2026-02-14 |
 | 13 | MCP Agent Integration | 🟢 Complete | Medium | 2026-02-14 |
 | 14 | Agent Persistence (Supabase/Postgres) | ⚫ Deferred | Low | 2026-02-11 |
+| 15 | Startup Agent Sync from Supabase | 🟡 In Progress | Critical | 2026-02-22 |
+| 16 | User × Agent Store Namespacing | ⚪ Not Started | High | 2026-02-22 |
 
 ---
 
@@ -59,6 +61,8 @@
 - [12-Postgres-Persistence](./12-Postgres-Persistence/scratchpad.md)
 - [13-MCP-Agent-Integration](./13-MCP-Agent-Integration/scratchpad.md)
 - [14-Agent-Persistence](./14-Agent-Persistence/scratchpad.md)
+- [15-Startup-Agent-Sync](./15-Startup-Agent-Sync/scratchpad.md)
+- [16-User-Agent-Store-Namespacing](./16-User-Agent-Store-Namespacing/scratchpad.md)
 
 ---
 
@@ -72,6 +76,32 @@
 ---
 
 ## Recent Activity
+
+- 2026-02-22 (Session 74 — Goal 15 implementation + Goal 16 creation):
+  - **Goal 15: Tasks 01–04 COMPLETE** — Startup Agent Sync from Supabase
+    - Created `robyn_server/agent_sync.py`: data models, SQL queries, scope parsing, sync orchestration
+    - Breaking change: `MCPConfig(url)` → `MCPConfig(servers: list[MCPServerConfig])` (multi-server MCP)
+    - Wired startup sync into `on_startup()` (AGENT_SYNC_SCOPE env var)
+    - Wired dev-gated lazy sync into `POST /assistants` (Option B, transparent, ROBYN_DEV=true)
+    - PR #11 merged (squash) to main
+    - CI/CD ordering fix: CD workflows now use `workflow_run` trigger (wait for CI to pass before building images)
+    - Task-05 (tests) remains
+  - **Goal 16: CREATED** — User × Agent Store Namespacing
+    - LangGraph Store namespace convention: `(user_id, assistant_id, category)`
+    - Webapp writes user+agent context, runtime reads/writes scoped memory
+    - Depends on Goal 15 (deterministic assistant IDs = Supabase agent UUIDs)
+    - 5 tasks planned: namespace convention, Store API update, auth guard, runtime scoping, documentation
+
+- 2026-02-22 (Session 73 — docproc-platform browser testing):
+  - **Goal 15: CREATED** — Startup Agent Sync from Supabase
+    - Root cause found: seeded agents never synced to LangGraph assistants (only UI-created agents sync)
+    - Rechts-Assistent with legal-mcp tool responds with hallucinated tools (Python, DALL-E, Wolfram Alpha)
+    - robyn-server logs show zero MCP activity — assistant has no `mcp_config`
+    - **Solution**: Two-layer sync — startup warm cache (configurable scope) + lazy on-demand sync per agent
+    - **Scoping**: `AGENT_SYNC_SCOPE` env var — `none` (default/lazy only), `all`, `org:<uuid>`
+    - legal-mcp FastMCP server verified running and healthy (port 8002, streamable HTTP transport)
+    - New seeded agent: ⚖️ Rechts-Assistent (legal-mcp tool, temperature 0.3, OpenAI Agent engine)
+    - See `.agent/goals/15-Startup-Agent-Sync/scratchpad.md` for full architecture
 
 - 2026-02-11 (deployment & docs session — PR #10):
   - **Docker deployment fixes**:
