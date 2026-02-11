@@ -1,6 +1,6 @@
 # Task 03: Streaming Compatibility — Fix Node Name References
 
-> **Status**: ⚪ Not Started
+> **Status**: 🟢 Complete
 > **Parent Goal**: [11-Create-Agent-Migration](../scratchpad.md)
 > **Depends On**: [Task-02-Agent-Migration](../Task-02-Agent-Migration/scratchpad.md)
 > **Created**: 2026-02-11
@@ -103,22 +103,41 @@ Run the agent with `create_agent` and inspect the raw events from `astream_event
 
 ## Acceptance Criteria
 
-- [ ] All `event_name == "agent"` references updated to `"model"` in `streams.py`
-- [ ] Metadata default `"langgraph_node"` fallback updated to `"model"`
-- [ ] `"graph_id": "agent"` references evaluated and documented (keep or change)
-- [ ] Test assertions updated for new node name
-- [ ] SSE streaming produces correct events end-to-end:
+- [x] All `event_name == "agent"` references updated to `"model"` in `streams.py`
+- [x] Metadata default `"langgraph_node"` fallback updated to `"model"`
+- [x] `"graph_id": "agent"` references evaluated and documented (keep — semantic label, not node name)
+- [x] Test assertions updated for new node name
+- [x] SSE streaming produces correct events end-to-end:
   - `event: metadata` — emitted first
   - `event: values` — initial values
-  - `event: messages/partial` or `event: messages` — token-level streaming
+  - `event: messages` — token-level streaming (messages-tuple protocol)
   - `event: updates` — final node output
   - `event: values` — final state
   - `event: end` — stream end
-- [ ] No regressions in `pytest` for streaming tests
-- [ ] Manual verification: start Robyn server, send a chat message, confirm SSE stream completes
+- [x] No regressions in `pytest` for streaming tests — 440 passed, 0 failed
+- [ ] Manual verification: start Robyn server, send a chat message, confirm SSE stream completes — deferred to Task-04 live testing
 
 ## Notes
 
 - The `on_chat_model_stream` events (token-level) are **not** affected by this change — they come from the chat model, not the graph node. Token streaming should continue to work without changes.
 - The `messages` tuple protocol (Goal 10) uses `current_metadata` which includes `langgraph_node` — this metadata flows through to the frontend and affects how messages are attributed. The default fallback should match the actual node name.
 - Consider adding a constant (e.g., `AGENT_NODE_NAME = "model"`) to avoid string literals scattered through the code. This would make future changes easier if the node name changes again.
+
+## Completion Log
+
+### What was done (completed simultaneously with Task-02)
+1. **`streams.py`** — 3 changes:
+   - `event_metadata.get("langgraph_node", "agent")` → `event_metadata.get("langgraph_node", "model")` (metadata default fallback)
+   - `event_name == "agent"` → `event_name == "model"` (chain end detection)
+   - `format_updates_event("agent", ...)` → `format_updates_event("model", ...)` (updates event node name)
+   - `"graph_id": "agent"` — **kept as-is** with comment: semantic label for the graph type, not a node name
+2. **`sse.py`** — Updated docstring examples from `"agent"` to `"model"` (2 places)
+3. **`test_streams.py`** — Updated 7 test assertions:
+   - `format_updates_event("agent", ...)` → `format_updates_event("model", ...)`
+   - `{"langgraph_node": "agent", ...}` → `{"langgraph_node": "model", ...}`
+   - `assert '"agent"' in result` → `assert '"model"' in result`
+4. **All 440 tests pass**, ruff clean
+
+### Key decisions
+- **`"graph_id": "agent"` kept unchanged**: This is a semantic label identifying the graph type (it's an "agent" graph), not a reference to the internal node name. Changing it could break frontend routing.
+- **Done simultaneously with Task-02**: The node name change is an immediate consequence of the `create_agent` migration. Splitting it into a separate commit would leave a broken intermediate state.

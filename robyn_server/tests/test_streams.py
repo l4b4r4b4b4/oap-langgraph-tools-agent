@@ -135,16 +135,16 @@ class TestSSEFrameFormatting:
     def test_format_updates_event(self):
         """Test updates event formatting."""
         updates = {"messages": [{"type": "ai", "content": "Response"}]}
-        result = format_updates_event("agent", updates)
+        result = format_updates_event("model", updates)
 
         assert "event: updates\n" in result
-        assert '"agent"' in result
+        assert '"model"' in result
         assert '"messages"' in result
 
     def test_format_messages_tuple_event(self):
         """Test messages-tuple event formatting (event: messages)."""
         message_delta = {"content": "Hello", "type": "ai", "id": "test-id"}
-        metadata = {"langgraph_node": "agent", "run_id": "test-run"}
+        metadata = {"langgraph_node": "model", "run_id": "test-run"}
         result = format_messages_tuple_event(message_delta, metadata)
 
         assert "event: messages\n" in result
@@ -154,13 +154,13 @@ class TestSSEFrameFormatting:
         assert len(parsed_data) == 2
         assert parsed_data[0]["content"] == "Hello"
         assert parsed_data[0]["type"] == "ai"
-        assert parsed_data[1]["langgraph_node"] == "agent"
+        assert parsed_data[1]["langgraph_node"] == "model"
         assert parsed_data[1]["run_id"] == "test-run"
 
     def test_format_messages_tuple_event_empty_content(self):
         """Test messages-tuple with empty content delta (initial event)."""
         message_delta = {"content": "", "type": "ai", "id": "test-id"}
-        metadata = {"langgraph_node": "agent"}
+        metadata = {"langgraph_node": "model"}
         result = format_messages_tuple_event(message_delta, metadata)
 
         assert "event: messages\n" in result
@@ -354,7 +354,7 @@ class TestSSEEventSequence:
         event is a [delta, metadata] tuple with ``event: messages``.
         """
         run_id = "test-run-id"
-        metadata = {"langgraph_node": "agent", "run_id": run_id}
+        metadata = {"langgraph_node": "model", "run_id": run_id}
 
         events = []
 
@@ -377,7 +377,7 @@ class TestSSEEventSequence:
         )
         events.append(
             format_updates_event(
-                "agent", {"messages": [{"type": "ai", "content": "Response"}]}
+                "model", {"messages": [{"type": "ai", "content": "Response"}]}
             )
         )
         events.append(
@@ -409,9 +409,9 @@ class TestSSEEventSequence:
         events = [
             format_metadata_event("run-1"),
             format_values_event({"messages": []}),
-            format_updates_event("agent", {"messages": []}),
+            format_updates_event("model", {"messages": []}),
             format_messages_tuple_event(
-                {"content": "test", "type": "ai"}, {"langgraph_node": "agent"}
+                {"content": "test", "type": "ai"}, {"langgraph_node": "model"}
             ),
             format_error_event("test error"),
         ]

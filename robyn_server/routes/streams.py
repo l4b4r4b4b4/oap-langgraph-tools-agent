@@ -632,12 +632,12 @@ async def execute_run_stream(
                 # messages-tuple event — no separate metadata event needed)
                 current_metadata = {
                     "owner": owner_id,
-                    "graph_id": "agent",
+                    "graph_id": "agent",  # semantic label, not node name
                     "assistant_id": assistant_id,
                     "run_id": run_id,
                     "thread_id": thread_id,
                     "user_id": owner_id,
-                    "langgraph_node": event_metadata.get("langgraph_node", "agent"),
+                    "langgraph_node": event_metadata.get("langgraph_node", "model"),
                     "langgraph_step": event_metadata.get("langgraph_step", 1),
                     "langgraph_checkpoint_ns": event_metadata.get(
                         "langgraph_checkpoint_ns", ""
@@ -714,7 +714,7 @@ async def execute_run_stream(
                     yield format_messages_tuple_event(final_delta, current_metadata)
 
             # Handle chain/graph end - emit updates event
-            elif event_kind == "on_chain_end" and event_name == "agent":
+            elif event_kind == "on_chain_end" and event_name == "model":
                 output = event_data.get("output", {})
                 if isinstance(output, dict):
                     output_messages = output.get("messages", [])
@@ -729,7 +729,7 @@ async def execute_run_stream(
 
                         if update_messages:
                             yield format_updates_event(
-                                "agent", {"messages": update_messages}
+                                "model", {"messages": update_messages}
                             )
                             # Use the last AI message for final values
                             for msg in reversed(update_messages):

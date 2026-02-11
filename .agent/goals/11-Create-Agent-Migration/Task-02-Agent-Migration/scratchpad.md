@@ -1,6 +1,6 @@
 # Task 02: Agent Migration — `create_react_agent` → `create_agent`
 
-> **Status**: ⚪ Not Started
+> **Status**: 🟢 Complete
 > **Parent Goal**: [11-Create-Agent-Migration](../scratchpad.md)
 > **Depends On**: [Task-01-Package-Upgrades](../Task-01-Package-Upgrades/scratchpad.md)
 > **Created**: 2026-02-11
@@ -128,20 +128,36 @@ After migration, remove `from langgraph.prebuilt import create_react_agent` if n
 
 ## Acceptance Criteria
 
-- [ ] `tools_agent/agent.py` uses `from langchain.agents import create_agent`
-- [ ] `create_react_agent` import fully removed
-- [ ] `system_prompt=` used instead of `prompt=`
-- [ ] `config_schema=` removed from the call
-- [ ] `GraphConfigPydantic` class and all its metadata preserved (used by OAP UI)
-- [ ] `graph()` function still returns a compiled graph successfully
-- [ ] Agent can be built with standard providers (OpenAI, Anthropic)
-- [ ] Agent can be built with custom vLLM endpoint
-- [ ] Agent can load MCP tools
-- [ ] Agent can load RAG tools
-- [ ] `ruff check` and `ruff format` pass
+- [x] `tools_agent/agent.py` uses `from langchain.agents import create_agent`
+- [x] `create_react_agent` import fully removed
+- [x] `system_prompt=` used instead of `prompt=`
+- [x] `config_schema=` removed from the call
+- [x] `GraphConfigPydantic` class and all its metadata preserved (used by OAP UI)
+- [x] `graph()` function still returns a compiled graph successfully
+- [ ] Agent can be built with standard providers (OpenAI, Anthropic) — deferred to Task-04 live testing
+- [ ] Agent can be built with custom vLLM endpoint — deferred to Task-04 live testing
+- [ ] Agent can load MCP tools — deferred to Task-04 live testing
+- [ ] Agent can load RAG tools — deferred to Task-04 live testing
+- [x] `ruff check` and `ruff format` pass
 
 ## Notes
 
 - The `create_agent` API also supports a `middleware=` parameter for advanced customization (dynamic prompts, tool error wrapping, guardrails). We are **not** adopting middleware in this task — the existing manual config parsing in `graph()` works fine. Middleware adoption can be a future enhancement.
 - The `create_agent` API supports `cache=` parameter for caching. Not relevant for this migration.
 - The `name=` parameter can be used to set a custom name for the agent graph. Could be useful but not required.
+- `create_agent` signature confirmed to accept `checkpointer` and `store` params — ready for Goal 12.
+
+## Completion Log
+
+### What was done
+1. **Changed import**: `from langgraph.prebuilt import create_react_agent` → `from langchain.agents import create_agent`
+2. **Updated function call**:
+   - `prompt=` → `system_prompt=`
+   - Removed `config_schema=GraphConfigPydantic` (not a parameter of `create_agent`; was only used for LangGraph runtime introspection, not by our Robyn server)
+3. **Verified `create_agent` signature** via `inspect.signature()` — confirmed it accepts `model`, `tools`, `system_prompt`, `checkpointer`, `store`, `middleware`, `response_format`, `state_schema`, `context_schema`, `name`, `cache`, etc.
+4. **All 440 tests pass**, ruff clean
+5. **Task-03 (streaming node name fix) done simultaneously** — see Task-03 scratchpad
+
+### Key decisions
+- **`config_schema` safely removed**: `GraphConfigPydantic` is manually parsed via `config.get("configurable", {})` in `graph()`. The `config_schema` param was only for LangGraph runtime introspection (used by `langgraph dev`), not by our Robyn server. OAP UI reads the schema via the assistants API, not from the compiled graph.
+- **No middleware adoption**: The existing manual config parsing pattern works. Middleware is a future enhancement.

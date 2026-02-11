@@ -3,7 +3,7 @@ import logging
 from langchain_core.runnables import RunnableConfig
 from typing import Optional, List
 from pydantic import BaseModel, Field
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 from tools_agent.utils.tools import create_rag_tool
 from langchain.chat_models import init_chat_model
 from langchain_openai import ChatOpenAI
@@ -435,9 +435,8 @@ async def graph(config: RunnableConfig):
             api_key=api_key or "No token found",
         )
 
-    return create_react_agent(
-        prompt=cfg.system_prompt + UNEDITABLE_SYSTEM_PROMPT,
+    return create_agent(
         model=model,
         tools=tools,
-        config_schema=GraphConfigPydantic,
+        system_prompt=cfg.system_prompt + UNEDITABLE_SYSTEM_PROMPT,
     )
