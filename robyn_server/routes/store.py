@@ -70,7 +70,7 @@ def register_store_routes(app: Robyn) -> None:
         metadata = body.get("metadata")
 
         storage = get_storage()
-        item = storage.store.put(
+        item = await storage.store.put(
             namespace=namespace,
             key=key,
             value=value,
@@ -109,7 +109,7 @@ def register_store_routes(app: Robyn) -> None:
             return error_response("key query parameter is required", 422)
 
         storage = get_storage()
-        item = storage.store.get(
+        item = await storage.store.get(
             namespace=namespace,
             key=key,
             owner_id=user.identity,
@@ -149,7 +149,7 @@ def register_store_routes(app: Robyn) -> None:
             return error_response("key query parameter is required", 422)
 
         storage = get_storage()
-        deleted = storage.store.delete(
+        deleted = await storage.store.delete(
             namespace=namespace,
             key=key,
             owner_id=user.identity,
@@ -204,7 +204,7 @@ def register_store_routes(app: Robyn) -> None:
             return error_response("limit and offset must be integers", 422)
 
         storage = get_storage()
-        items = storage.store.search(
+        items = await storage.store.search(
             namespace=namespace,
             owner_id=user.identity,
             prefix=prefix,
@@ -230,6 +230,6 @@ def register_store_routes(app: Robyn) -> None:
             return error_response(e.message, 401)
 
         storage = get_storage()
-        namespaces = storage.store.list_namespaces(user.identity)
+        namespaces = await storage.store.list_namespaces(user.identity)
 
         return json_response(namespaces)

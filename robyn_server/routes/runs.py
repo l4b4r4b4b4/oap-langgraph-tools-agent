@@ -66,21 +66,23 @@ def register_run_routes(app: Robyn) -> None:
         storage = get_storage()
 
         # Check if thread exists
-        thread = storage.threads.get(thread_id, user.identity)
+        thread = await storage.threads.get(thread_id, user.identity)
         if thread is None:
             # Handle if_not_exists behavior
             if create_data.if_not_exists == "create":
                 # Create the thread automatically
-                thread = storage.threads.create({}, user.identity)
+                thread = await storage.threads.create({}, user.identity)
                 thread_id = thread.thread_id
             else:
                 return error_response(f"Thread {thread_id} not found", 404)
 
         # Check if assistant exists (if specified)
-        assistant = storage.assistants.get(create_data.assistant_id, user.identity)
+        assistant = await storage.assistants.get(
+            create_data.assistant_id, user.identity
+        )
         if assistant is None:
             # Try to find by graph_id (assistant_id can be a graph name)
-            assistants = storage.assistants.list(user.identity)
+            assistants = await storage.assistants.list(user.identity)
             assistant = next(
                 (a for a in assistants if a.graph_id == create_data.assistant_id),
                 None,
@@ -91,7 +93,7 @@ def register_run_routes(app: Robyn) -> None:
                 )
 
         # Check for multitask conflicts
-        active_run = storage.runs.get_active_run(thread_id, user.identity)
+        active_run = await storage.runs.get_active_run(thread_id, user.identity)
         if active_run:
             strategy = create_data.multitask_strategy
             if strategy == "reject":
@@ -102,12 +104,14 @@ def register_run_routes(app: Robyn) -> None:
                 )
             elif strategy == "interrupt":
                 # Interrupt the active run
-                storage.runs.update_status(
+                await storage.runs.update_status(
                     active_run.run_id, "interrupted", user.identity
                 )
             elif strategy == "rollback":
                 # Cancel and delete the active run
-                storage.runs.update_status(active_run.run_id, "error", user.identity)
+                await storage.runs.update_status(
+                    active_run.run_id, "error", user.identity
+                )
             # "enqueue" - just create the new run, it will wait
 
         # Build run data
@@ -128,10 +132,10 @@ def register_run_routes(app: Robyn) -> None:
             "multitask_strategy": create_data.multitask_strategy,
         }
 
-        run = storage.runs.create(run_data, user.identity)
+        run = await storage.runs.create(run_data, user.identity)
 
         # Update thread status to busy
-        storage.threads.update(thread_id, {"status": "busy"}, user.identity)
+        await storage.threads.update(thread_id, {"status": "busy"}, user.identity)
 
         # Return with Content-Location header
         response = json_response(run)
@@ -161,7 +165,7 @@ def register_run_routes(app: Robyn) -> None:
         storage = get_storage()
 
         # Check if thread exists
-        thread = storage.threads.get(thread_id, user.identity)
+        thread = await storage.threads.get(thread_id, user.identity)
         if thread is None:
             return error_response(f"Thread {thread_id} not found", 404)
 
@@ -187,7 +191,7 @@ def register_run_routes(app: Robyn) -> None:
 
             status = request.query_params.get("status", None)
 
-        runs = storage.runs.list_by_thread(
+        runs = await storage.runs.list_by_thread(
             thread_id, user.identity, limit=limit, offset=offset, status=status
         )
 
@@ -215,11 +219,11 @@ def register_run_routes(app: Robyn) -> None:
         storage = get_storage()
 
         # Check if thread exists first
-        thread = storage.threads.get(thread_id, user.identity)
+        thread = await storage.threads.get(thread_id, user.identity)
         if thread is None:
             return error_response(f"Thread {thread_id} not found", 404)
 
-        run = storage.runs.get_by_thread(thread_id, run_id, user.identity)
+        run = await storage.runs.get_by_thread(thread_id, run_id, user.identity)
         if run is None:
             return error_response(f"Run {run_id} not found", 404)
 
@@ -247,11 +251,11 @@ def register_run_routes(app: Robyn) -> None:
         storage = get_storage()
 
         # Check if thread exists first
-        thread = storage.threads.get(thread_id, user.identity)
+        thread = await storage.threads.get(thread_id, user.identity)
         if thread is None:
             return error_response(f"Thread {thread_id} not found", 404)
 
-        deleted = storage.runs.delete_by_thread(thread_id, run_id, user.identity)
+        deleted = await storage.runs.delete_by_thread(thread_id, run_id, user.identity)
         if not deleted:
             return error_response(f"Run {run_id} not found", 404)
 
@@ -293,18 +297,20 @@ def register_run_routes(app: Robyn) -> None:
         storage = get_storage()
 
         # Check if thread exists
-        thread = storage.threads.get(thread_id, user.identity)
+        thread = await storage.threads.get(thread_id, user.identity)
         if thread is None:
             if create_data.if_not_exists == "create":
-                thread = storage.threads.create({}, user.identity)
+                thread = await storage.threads.create({}, user.identity)
                 thread_id = thread.thread_id
             else:
                 return error_response(f"Thread {thread_id} not found", 404)
 
         # Check if assistant exists
-        assistant = storage.assistants.get(create_data.assistant_id, user.identity)
+        assistant = await storage.assistants.get(
+            create_data.assistant_id, user.identity
+        )
         if assistant is None:
-            assistants = storage.assistants.list(user.identity)
+            assistants = await storage.assistants.list(user.identity)
             assistant = next(
                 (a for a in assistants if a.graph_id == create_data.assistant_id),
                 None,
@@ -315,7 +321,7 @@ def register_run_routes(app: Robyn) -> None:
                 )
 
         # Check for multitask conflicts - wait uses reject by default
-        active_run = storage.runs.get_active_run(thread_id, user.identity)
+        active_run = await storage.runs.get_active_run(thread_id, user.identity)
         if active_run:
             strategy = create_data.multitask_strategy
             if strategy == "reject":
@@ -323,11 +329,13 @@ def register_run_routes(app: Robyn) -> None:
                     f"Thread {thread_id} already has an active run", 409
                 )
             elif strategy == "interrupt":
-                storage.runs.update_status(
+                await storage.runs.update_status(
                     active_run.run_id, "interrupted", user.identity
                 )
             elif strategy == "rollback":
-                storage.runs.update_status(active_run.run_id, "error", user.identity)
+                await storage.runs.update_status(
+                    active_run.run_id, "error", user.identity
+                )
 
         # Build run data
         run_data: dict[str, Any] = {
@@ -345,10 +353,10 @@ def register_run_routes(app: Robyn) -> None:
             "multitask_strategy": create_data.multitask_strategy,
         }
 
-        run = storage.runs.create(run_data, user.identity)
+        run = await storage.runs.create(run_data, user.identity)
 
         # Update thread status
-        storage.threads.update(thread_id, {"status": "busy"}, user.identity)
+        await storage.threads.update(thread_id, {"status": "busy"}, user.identity)
 
         # TODO: Execute agent graph here
         # For now, we simulate execution by:
@@ -358,7 +366,7 @@ def register_run_routes(app: Robyn) -> None:
 
         # Store input as thread state (simplified)
         if create_data.input:
-            storage.threads.add_state_snapshot(
+            await storage.threads.add_state_snapshot(
                 thread_id,
                 {
                     "values": create_data.input
@@ -367,7 +375,7 @@ def register_run_routes(app: Robyn) -> None:
                 },
                 user.identity,
             )
-            storage.threads.update(
+            await storage.threads.update(
                 thread_id,
                 {
                     "values": create_data.input
@@ -378,13 +386,13 @@ def register_run_routes(app: Robyn) -> None:
             )
 
         # Mark run as success
-        storage.runs.update_status(run.run_id, "success", user.identity)
+        await storage.runs.update_status(run.run_id, "success", user.identity)
 
         # Update thread status back to idle
-        storage.threads.update(thread_id, {"status": "idle"}, user.identity)
+        await storage.threads.update(thread_id, {"status": "idle"}, user.identity)
 
         # Get final thread state
-        state = storage.threads.get_state(thread_id, user.identity)
+        state = await storage.threads.get_state(thread_id, user.identity)
 
         # Return with Content-Location header
         response = json_response(state)
@@ -417,12 +425,12 @@ def register_run_routes(app: Robyn) -> None:
         storage = get_storage()
 
         # Check if thread exists
-        thread = storage.threads.get(thread_id, user.identity)
+        thread = await storage.threads.get(thread_id, user.identity)
         if thread is None:
             return error_response(f"Thread {thread_id} not found", 404)
 
         # Get the run
-        run = storage.runs.get_by_thread(thread_id, run_id, user.identity)
+        run = await storage.runs.get_by_thread(thread_id, run_id, user.identity)
         if run is None:
             return error_response(f"Run {run_id} not found", 404)
 
@@ -431,10 +439,10 @@ def register_run_routes(app: Robyn) -> None:
             return error_response(f"Cannot cancel run with status '{run.status}'", 409)
 
         # Update run status to interrupted
-        storage.runs.update_status(run_id, "interrupted", user.identity)
+        await storage.runs.update_status(run_id, "interrupted", user.identity)
 
         # Update thread status back to idle
-        storage.threads.update(thread_id, {"status": "idle"}, user.identity)
+        await storage.threads.update(thread_id, {"status": "idle"}, user.identity)
 
         # Return empty object on success
         return json_response({})

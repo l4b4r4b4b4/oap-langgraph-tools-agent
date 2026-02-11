@@ -104,6 +104,7 @@ async def initialize_database() -> bool:
             timeout=config.database.pool_timeout,
         )
         await _create_checkpointer_and_store()
+        await _create_langgraph_server_schema()
         _initialized = True
         logger.info(
             "Postgres persistence initialised (pool min=%d max=%d)",
@@ -285,6 +286,22 @@ async def _enable_rls_on_langgraph_tables() -> None:
                 f"ENABLE ROW LEVEL SECURITY"
             )
     logger.info("RLS enabled on LangGraph tables (PostgREST access denied)")
+
+
+async def _create_langgraph_server_schema() -> None:
+    """Create the ``langgraph_server`` schema and runtime tables.
+
+    Uses :class:`~robyn_server.postgres_storage.PostgresStorage.run_migrations`
+    which executes idempotent ``CREATE SCHEMA/TABLE IF NOT EXISTS`` DDL.
+    Safe to run on every startup.
+    """
+    if _pool is None:
+        return
+
+    from robyn_server.postgres_storage import PostgresStorage
+
+    storage = PostgresStorage(_pool)
+    await storage.run_migrations()
 
 
 async def _create_checkpointer_and_store() -> None:

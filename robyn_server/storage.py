@@ -5,9 +5,12 @@ This module provides owner-scoped CRUD operations for:
 - Threads
 - Runs
 - Store Items (key-value storage)
+- Crons
 
 All operations enforce owner isolation via metadata.owner filtering.
-The storage can later be swapped for Postgres/Supabase persistence.
+All methods are async to support both in-memory and Postgres backends.
+The storage can be swapped for Postgres/Supabase persistence via
+``get_storage()`` which checks ``is_postgres_enabled()``.
 """
 
 import logging
@@ -55,6 +58,7 @@ class BaseStore(Generic[T]):
     """Generic base store with common CRUD logic.
 
     All operations enforce owner isolation by checking metadata.owner.
+    All public methods are async for compatibility with Postgres backends.
     """
 
     def __init__(self, id_field: str = "id"):
@@ -102,7 +106,7 @@ class BaseStore(Generic[T]):
         """
         raise NotImplementedError
 
-    def create(self, data: dict[str, Any], owner_id: str) -> T:
+    async def create(self, data: dict[str, Any], owner_id: str) -> T:
         """Create a new resource with owner stamping.
 
         Args:
@@ -133,7 +137,7 @@ class BaseStore(Generic[T]):
 
         return self._to_model(resource_data)
 
-    def get(self, resource_id: str, owner_id: str) -> T | None:
+    async def get(self, resource_id: str, owner_id: str) -> T | None:
         """Get a resource by ID if owned by the user.
 
         Args:
@@ -154,7 +158,7 @@ class BaseStore(Generic[T]):
 
         return self._to_model(resource_data)
 
-    def list(self, owner_id: str, **filters: Any) -> list[T]:
+    async def list(self, owner_id: str, **filters: Any) -> list[T]:
         """List resources owned by the user.
 
         Args:
@@ -178,7 +182,9 @@ class BaseStore(Generic[T]):
 
         return results
 
-    def update(self, resource_id: str, data: dict[str, Any], owner_id: str) -> T | None:
+    async def update(
+        self, resource_id: str, data: dict[str, Any], owner_id: str
+    ) -> T | None:
         """Update a resource if owned by the user.
 
         Args:
@@ -217,7 +223,7 @@ class BaseStore(Generic[T]):
         logger.debug(f"Updated {self.__class__.__name__} resource: {resource_id}")
         return self._to_model(resource_data)
 
-    def delete(self, resource_id: str, owner_id: str) -> bool:
+    async def delete(self, resource_id: str, owner_id: str) -> bool:
         """Delete a resource if owned by the user.
 
         Args:
@@ -240,7 +246,7 @@ class BaseStore(Generic[T]):
         logger.debug(f"Deleted {self.__class__.__name__} resource: {resource_id}")
         return True
 
-    def count(self, owner_id: str, **filters: Any) -> int:
+    async def count(self, owner_id: str, **filters: Any) -> int:
         """Count resources owned by the user.
 
         Args:
@@ -250,9 +256,9 @@ class BaseStore(Generic[T]):
         Returns:
             Count of matching resources
         """
-        return len(self.list(owner_id, **filters))
+        return len(await self.list(owner_id, **filters))
 
-    def clear(self) -> None:
+    async def clear(self) -> None:
         """Clear all data (for testing only)."""
         self._data.clear()
 
@@ -294,7 +300,7 @@ class AssistantStore(BaseStore[Assistant]):
             updated_at=data["updated_at"],
         )
 
-    def create(self, data: dict[str, Any], owner_id: str) -> Assistant:
+    async def create(self, data: dict[str, Any], owner_id: str) -> Assistant:
         """Create a new assistant.
 
         Args:
@@ -314,9 +320,9 @@ class AssistantStore(BaseStore[Assistant]):
         if "version" not in data:
             data = {**data, "version": 1}
 
-        return super().create(data, owner_id)
+        return await super().create(data, owner_id)
 
-    def update(
+    async def update(
         self, resource_id: str, data: dict[str, Any], owner_id: str
     ) -> Assistant | None:
         """Update an assistant, incrementing version on changes.
@@ -335,7 +341,7 @@ class AssistantStore(BaseStore[Assistant]):
             current_version = current.get("version", 1)
             data = {**data, "version": current_version + 1}
 
-        return super().update(resource_id, data, owner_id)
+        return await super().update(resource_id, data, owner_id)
 
 
 # ============================================================================
@@ -364,7 +370,7 @@ class ThreadStore(BaseStore[Thread]):
             updated_at=data["updated_at"],
         )
 
-    def create(self, data: dict[str, Any], owner_id: str) -> Thread:
+    async def create(self, data: dict[str, Any], owner_id: str) -> Thread:
         """Create a new thread with initial empty state history.
 
         Args:
@@ -374,12 +380,12 @@ class ThreadStore(BaseStore[Thread]):
         Returns:
             Created Thread instance
         """
-        thread = super().create(data, owner_id)
+        thread = await super().create(data, owner_id)
         # Initialize empty history for this thread
         self._history[thread.thread_id] = []
         return thread
 
-    def delete(self, resource_id: str, owner_id: str) -> bool:
+    async def delete(self, resource_id: str, owner_id: str) -> bool:
         """Delete a thread and its state history.
 
         Args:
@@ -389,13 +395,13 @@ class ThreadStore(BaseStore[Thread]):
         Returns:
             True if deleted, False if not found or not owned
         """
-        deleted = super().delete(resource_id, owner_id)
+        deleted = await super().delete(resource_id, owner_id)
         if deleted:
             # Clean up history
             self._history.pop(resource_id, None)
         return deleted
 
-    def get_state(self, thread_id: str, owner_id: str) -> ThreadState | None:
+    async def get_state(self, thread_id: str, owner_id: str) -> ThreadState | None:
         """Get the current state of a thread.
 
         Args:
@@ -430,7 +436,7 @@ class ThreadStore(BaseStore[Thread]):
             interrupts=[],
         )
 
-    def add_state_snapshot(
+    async def add_state_snapshot(
         self, thread_id: str, state: dict[str, Any], owner_id: str
     ) -> bool:
         """Add a state snapshot to the thread's history.
@@ -469,7 +475,7 @@ class ThreadStore(BaseStore[Thread]):
 
         return True
 
-    def get_history(
+    async def get_history(
         self, thread_id: str, owner_id: str, limit: int = 10, before: str | None = None
     ) -> list[ThreadState] | None:
         """Get state history for a thread.
@@ -527,9 +533,9 @@ class ThreadStore(BaseStore[Thread]):
 
         return result
 
-    def clear(self) -> None:
+    async def clear(self) -> None:
         """Clear all data including history (for testing only)."""
-        super().clear()
+        await super().clear()
         self._history.clear()
 
 
@@ -558,7 +564,7 @@ class RunStore(BaseStore[Run]):
             updated_at=data["updated_at"],
         )
 
-    def create(self, data: dict[str, Any], owner_id: str) -> Run:
+    async def create(self, data: dict[str, Any], owner_id: str) -> Run:
         """Create a new run.
 
         Args:
@@ -580,9 +586,9 @@ class RunStore(BaseStore[Run]):
         if "status" not in data:
             data = {**data, "status": "pending"}
 
-        return super().create(data, owner_id)
+        return await super().create(data, owner_id)
 
-    def list_by_thread(
+    async def list_by_thread(
         self,
         thread_id: str,
         owner_id: str,
@@ -602,7 +608,7 @@ class RunStore(BaseStore[Run]):
         Returns:
             List of runs for the thread
         """
-        runs = self.list(owner_id, thread_id=thread_id)
+        runs = await self.list(owner_id, thread_id=thread_id)
 
         # Apply status filter
         if status:
@@ -614,7 +620,9 @@ class RunStore(BaseStore[Run]):
         # Apply pagination
         return runs[offset : offset + limit]
 
-    def get_by_thread(self, thread_id: str, run_id: str, owner_id: str) -> Run | None:
+    async def get_by_thread(
+        self, thread_id: str, run_id: str, owner_id: str
+    ) -> Run | None:
         """Get a specific run by thread_id and run_id.
 
         Args:
@@ -625,7 +633,7 @@ class RunStore(BaseStore[Run]):
         Returns:
             Run if found, owned, and belongs to thread, None otherwise
         """
-        run = self.get(run_id, owner_id)
+        run = await self.get(run_id, owner_id)
         if run is None:
             return None
 
@@ -635,7 +643,9 @@ class RunStore(BaseStore[Run]):
 
         return run
 
-    def delete_by_thread(self, thread_id: str, run_id: str, owner_id: str) -> bool:
+    async def delete_by_thread(
+        self, thread_id: str, run_id: str, owner_id: str
+    ) -> bool:
         """Delete a run by thread_id and run_id.
 
         Args:
@@ -647,13 +657,13 @@ class RunStore(BaseStore[Run]):
             True if deleted, False if not found or not owned
         """
         # First verify the run belongs to the thread
-        run = self.get_by_thread(thread_id, run_id, owner_id)
+        run = await self.get_by_thread(thread_id, run_id, owner_id)
         if run is None:
             return False
 
-        return self.delete(run_id, owner_id)
+        return await self.delete(run_id, owner_id)
 
-    def get_active_run(self, thread_id: str, owner_id: str) -> Run | None:
+    async def get_active_run(self, thread_id: str, owner_id: str) -> Run | None:
         """Get the currently active (pending or running) run for a thread.
 
         Args:
@@ -663,13 +673,15 @@ class RunStore(BaseStore[Run]):
         Returns:
             Active Run if one exists, None otherwise
         """
-        runs = self.list(owner_id, thread_id=thread_id)
+        runs = await self.list(owner_id, thread_id=thread_id)
         for run in runs:
             if run.status in ("pending", "running"):
                 return run
         return None
 
-    def update_status(self, run_id: str, status: str, owner_id: str) -> Run | None:
+    async def update_status(
+        self, run_id: str, status: str, owner_id: str
+    ) -> Run | None:
         """Update run status.
 
         Args:
@@ -680,9 +692,9 @@ class RunStore(BaseStore[Run]):
         Returns:
             Updated Run instance if found and owned, None otherwise
         """
-        return self.update(run_id, {"status": status}, owner_id)
+        return await self.update(run_id, {"status": status}, owner_id)
 
-    def count_by_thread(self, thread_id: str, owner_id: str) -> int:
+    async def count_by_thread(self, thread_id: str, owner_id: str) -> int:
         """Count runs for a specific thread.
 
         Args:
@@ -692,7 +704,7 @@ class RunStore(BaseStore[Run]):
         Returns:
             Number of runs for the thread
         """
-        return len(self.list(owner_id, thread_id=thread_id))
+        return len(await self.list(owner_id, thread_id=thread_id))
 
 
 # ============================================================================
@@ -735,13 +747,14 @@ class StoreStorage:
     """Storage for key-value items (Store API).
 
     Items are organized by namespace and key, with owner isolation.
+    All public methods are async for compatibility with Postgres backends.
     """
 
     def __init__(self):
         # Structure: {owner_id: {namespace: {key: StoreItem}}}
         self._items: dict[str, dict[str, dict[str, StoreItem]]] = {}
 
-    def put(
+    async def put(
         self,
         namespace: str,
         key: str,
@@ -785,7 +798,7 @@ class StoreStorage:
 
         return item
 
-    def get(
+    async def get(
         self,
         namespace: str,
         key: str,
@@ -805,7 +818,7 @@ class StoreStorage:
         namespace_store = owner_store.get(namespace, {})
         return namespace_store.get(key)
 
-    def delete(
+    async def delete(
         self,
         namespace: str,
         key: str,
@@ -828,7 +841,7 @@ class StoreStorage:
             return True
         return False
 
-    def search(
+    async def search(
         self,
         namespace: str,
         owner_id: str,
@@ -863,7 +876,7 @@ class StoreStorage:
         # Apply pagination
         return items[offset : offset + limit]
 
-    def list_namespaces(self, owner_id: str) -> list[str]:
+    async def list_namespaces(self, owner_id: str) -> list[str]:
         """List all namespaces for an owner.
 
         Args:
@@ -875,7 +888,7 @@ class StoreStorage:
         owner_store = self._items.get(owner_id, {})
         return list(owner_store.keys())
 
-    def clear(self) -> None:
+    async def clear(self) -> None:
         """Clear all items (for testing only)."""
         self._items.clear()
 
@@ -912,7 +925,7 @@ class CronStore(BaseStore["Cron"]):
             metadata=data.get("metadata", {}),
         )
 
-    def create(self, data: dict[str, Any], owner_id: str) -> "Cron":
+    async def create(self, data: dict[str, Any], owner_id: str) -> "Cron":
         """Create a new cron with owner stamping.
 
         Args:
@@ -943,7 +956,7 @@ class CronStore(BaseStore["Cron"]):
 
         return self._to_model(resource_data)
 
-    def update(
+    async def update(
         self,
         cron_id: str,
         owner_id: str,
@@ -977,7 +990,7 @@ class CronStore(BaseStore["Cron"]):
 
         return self._to_model(resource_data)
 
-    def count(self, owner_id: str, **filters: Any) -> int:
+    async def count(self, owner_id: str, **filters: Any) -> int:
         """Count crons matching filters.
 
         Args:
@@ -1020,13 +1033,13 @@ class Storage:
         self.store = StoreStorage()
         self.crons = CronStore()
 
-    def clear_all(self) -> None:
+    async def clear_all(self) -> None:
         """Clear all stores (for testing only)."""
-        self.assistants.clear()
-        self.threads.clear()
-        self.runs.clear()
-        self.store.clear()
-        self.crons.clear()
+        await self.assistants.clear()
+        await self.threads.clear()
+        await self.runs.clear()
+        await self.store.clear()
+        await self.crons.clear()
 
 
 # ============================================================================
@@ -1040,12 +1053,30 @@ _storage: Storage | None = None
 def get_storage() -> Storage:
     """Get the global storage instance.
 
+    Returns PostgresStorage if DATABASE_URL is configured and Postgres
+    is initialised, otherwise returns in-memory Storage.
+
     Returns:
         Storage instance with all stores
     """
     global _storage
     if _storage is None:
-        _storage = Storage()
+        from robyn_server.database import get_pool, is_postgres_enabled
+
+        if is_postgres_enabled():
+            pool = get_pool()
+            if pool is not None:
+                from robyn_server.postgres_storage import PostgresStorage
+
+                _storage = PostgresStorage(pool)
+                logger.info("Using Postgres-backed storage")
+            else:
+                _storage = Storage()
+                logger.warning(
+                    "Postgres enabled but pool unavailable — falling back to in-memory"
+                )
+        else:
+            _storage = Storage()
     return _storage
 
 

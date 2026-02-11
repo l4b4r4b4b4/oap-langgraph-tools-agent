@@ -164,9 +164,9 @@ class TestAssistantModels:
 class TestAssistantStorage:
     """Tests for assistant storage operations."""
 
-    def test_create_assistant(self, storage: Storage, mock_user):
+    async def test_create_assistant(self, storage: Storage, mock_user):
         """Create assistant stores with correct fields."""
-        assistant = storage.assistants.create(
+        assistant = await storage.assistants.create(
             {
                 "graph_id": "agent",
                 "name": "Test Assistant",
@@ -180,9 +180,9 @@ class TestAssistantStorage:
         assert assistant.metadata["owner"] == mock_user.identity
         assert assistant.version == 1
 
-    def test_create_assistant_with_description(self, storage: Storage, mock_user):
+    async def test_create_assistant_with_description(self, storage: Storage, mock_user):
         """Create assistant with description field."""
-        assistant = storage.assistants.create(
+        assistant = await storage.assistants.create(
             {
                 "graph_id": "agent",
                 "name": "My Assistant",
@@ -193,15 +193,17 @@ class TestAssistantStorage:
 
         assert assistant.description == "A helpful assistant"
 
-    def test_update_assistant_increments_version(self, storage: Storage, mock_user):
+    async def test_update_assistant_increments_version(
+        self, storage: Storage, mock_user
+    ):
         """Update assistant increments version number."""
-        created = storage.assistants.create(
+        created = await storage.assistants.create(
             {"graph_id": "agent"},
             mock_user.identity,
         )
         assert created.version == 1
 
-        updated = storage.assistants.update(
+        updated = await storage.assistants.update(
             created.assistant_id,
             {"name": "Updated Name"},
             mock_user.identity,
@@ -210,9 +212,11 @@ class TestAssistantStorage:
         assert updated is not None
         assert updated.version == 2
 
-    def test_update_assistant_preserves_context(self, storage: Storage, mock_user):
+    async def test_update_assistant_preserves_context(
+        self, storage: Storage, mock_user
+    ):
         """Update assistant preserves context field."""
-        created = storage.assistants.create(
+        created = await storage.assistants.create(
             {
                 "graph_id": "agent",
                 "context": {"key": "value"},
@@ -220,7 +224,7 @@ class TestAssistantStorage:
             mock_user.identity,
         )
 
-        updated = storage.assistants.update(
+        updated = await storage.assistants.update(
             created.assistant_id,
             {"name": "New Name"},
             mock_user.identity,
@@ -229,52 +233,60 @@ class TestAssistantStorage:
         assert updated is not None
         assert updated.context == {"key": "value"}
 
-    def test_get_assistant_owner_isolation(
+    async def test_get_assistant_owner_isolation(
         self, storage: Storage, mock_user, other_user
     ):
         """Users can only get their own assistants."""
-        assistant = storage.assistants.create(
+        assistant = await storage.assistants.create(
             {"graph_id": "agent"},
             mock_user.identity,
         )
 
         # Owner can access
-        result = storage.assistants.get(assistant.assistant_id, mock_user.identity)
+        result = await storage.assistants.get(
+            assistant.assistant_id, mock_user.identity
+        )
         assert result is not None
 
         # Other user cannot access
-        result = storage.assistants.get(assistant.assistant_id, other_user.identity)
+        result = await storage.assistants.get(
+            assistant.assistant_id, other_user.identity
+        )
         assert result is None
 
-    def test_list_assistants_owner_isolation(
+    async def test_list_assistants_owner_isolation(
         self, storage: Storage, mock_user, other_user
     ):
         """List only returns user's own assistants."""
-        storage.assistants.create({"graph_id": "agent"}, mock_user.identity)
-        storage.assistants.create({"graph_id": "agent"}, mock_user.identity)
-        storage.assistants.create({"graph_id": "agent"}, other_user.identity)
+        await storage.assistants.create({"graph_id": "agent"}, mock_user.identity)
+        await storage.assistants.create({"graph_id": "agent"}, mock_user.identity)
+        await storage.assistants.create({"graph_id": "agent"}, other_user.identity)
 
-        user_assistants = storage.assistants.list(mock_user.identity)
-        other_assistants = storage.assistants.list(other_user.identity)
+        user_assistants = await storage.assistants.list(mock_user.identity)
+        other_assistants = await storage.assistants.list(other_user.identity)
 
         assert len(user_assistants) == 2
         assert len(other_assistants) == 1
 
-    def test_delete_assistant_owner_isolation(
+    async def test_delete_assistant_owner_isolation(
         self, storage: Storage, mock_user, other_user
     ):
         """Users can only delete their own assistants."""
-        assistant = storage.assistants.create(
+        assistant = await storage.assistants.create(
             {"graph_id": "agent"},
             mock_user.identity,
         )
 
         # Other user cannot delete
-        result = storage.assistants.delete(assistant.assistant_id, other_user.identity)
+        result = await storage.assistants.delete(
+            assistant.assistant_id, other_user.identity
+        )
         assert result is False
 
         # Owner can delete
-        result = storage.assistants.delete(assistant.assistant_id, mock_user.identity)
+        result = await storage.assistants.delete(
+            assistant.assistant_id, mock_user.identity
+        )
         assert result is True
 
 
@@ -286,60 +298,60 @@ class TestAssistantStorage:
 class TestAssistantSearch:
     """Tests for assistant search functionality."""
 
-    def test_filter_by_graph_id(self, storage: Storage, mock_user):
+    async def test_filter_by_graph_id(self, storage: Storage, mock_user):
         """Search filters by graph_id."""
-        storage.assistants.create({"graph_id": "agent"}, mock_user.identity)
-        storage.assistants.create({"graph_id": "agent"}, mock_user.identity)
+        await storage.assistants.create({"graph_id": "agent"}, mock_user.identity)
+        await storage.assistants.create({"graph_id": "agent"}, mock_user.identity)
 
-        assistants = storage.assistants.list(mock_user.identity)
+        assistants = await storage.assistants.list(mock_user.identity)
         filtered = [a for a in assistants if a.graph_id == "agent"]
 
         assert len(filtered) == 2
 
-    def test_filter_by_name(self, storage: Storage, mock_user):
+    async def test_filter_by_name(self, storage: Storage, mock_user):
         """Search filters by name substring."""
-        storage.assistants.create(
+        await storage.assistants.create(
             {"graph_id": "agent", "name": "Test Assistant"},
             mock_user.identity,
         )
-        storage.assistants.create(
+        await storage.assistants.create(
             {"graph_id": "agent", "name": "Production Bot"},
             mock_user.identity,
         )
 
-        assistants = storage.assistants.list(mock_user.identity)
+        assistants = await storage.assistants.list(mock_user.identity)
         filtered = [a for a in assistants if a.name and "Test" in a.name]
 
         assert len(filtered) == 1
         assert filtered[0].name == "Test Assistant"
 
-    def test_filter_by_metadata(self, storage: Storage, mock_user):
+    async def test_filter_by_metadata(self, storage: Storage, mock_user):
         """Search filters by metadata values."""
-        storage.assistants.create(
+        await storage.assistants.create(
             {"graph_id": "agent", "metadata": {"env": "prod"}},
             mock_user.identity,
         )
-        storage.assistants.create(
+        await storage.assistants.create(
             {"graph_id": "agent", "metadata": {"env": "dev"}},
             mock_user.identity,
         )
 
-        assistants = storage.assistants.list(mock_user.identity)
+        assistants = await storage.assistants.list(mock_user.identity)
         # Note: owner is also in metadata, so we check env specifically
         filtered = [a for a in assistants if a.metadata.get("env") == "prod"]
 
         assert len(filtered) == 1
 
-    def test_pagination(self, storage: Storage, mock_user):
+    async def test_pagination(self, storage: Storage, mock_user):
         """Search respects limit and offset."""
         # Create 5 assistants
         for i in range(5):
-            storage.assistants.create(
+            await storage.assistants.create(
                 {"graph_id": "agent", "name": f"Assistant {i}"},
                 mock_user.identity,
             )
 
-        assistants = storage.assistants.list(mock_user.identity)
+        assistants = await storage.assistants.list(mock_user.identity)
 
         # Simulate pagination
         page1 = assistants[0:2]
@@ -359,9 +371,9 @@ class TestAssistantSearch:
 class TestAssistantConfig:
     """Tests for assistant config handling."""
 
-    def test_config_with_configurable(self, storage: Storage, mock_user):
+    async def test_config_with_configurable(self, storage: Storage, mock_user):
         """Config stores configurable settings."""
-        assistant = storage.assistants.create(
+        assistant = await storage.assistants.create(
             {
                 "graph_id": "agent",
                 "config": {
@@ -380,9 +392,9 @@ class TestAssistantConfig:
         assert assistant.config.recursion_limit == 50
         assert assistant.config.configurable["model_name"] == "custom:"
 
-    def test_config_defaults(self, storage: Storage, mock_user):
+    async def test_config_defaults(self, storage: Storage, mock_user):
         """Config has sensible defaults."""
-        assistant = storage.assistants.create(
+        assistant = await storage.assistants.create(
             {"graph_id": "agent"},
             mock_user.identity,
         )
@@ -391,9 +403,9 @@ class TestAssistantConfig:
         assert assistant.config.recursion_limit == 25
         assert assistant.config.configurable == {}
 
-    def test_update_config_partial(self, storage: Storage, mock_user):
+    async def test_update_config_partial(self, storage: Storage, mock_user):
         """Update can modify config partially."""
-        created = storage.assistants.create(
+        created = await storage.assistants.create(
             {
                 "graph_id": "agent",
                 "config": {
@@ -404,7 +416,7 @@ class TestAssistantConfig:
             mock_user.identity,
         )
 
-        updated = storage.assistants.update(
+        updated = await storage.assistants.update(
             created.assistant_id,
             {
                 "config": {
@@ -428,41 +440,41 @@ class TestAssistantConfig:
 class TestEdgeCases:
     """Tests for edge cases and error conditions."""
 
-    def test_get_nonexistent_assistant(self, storage: Storage, mock_user):
+    async def test_get_nonexistent_assistant(self, storage: Storage, mock_user):
         """Get returns None for nonexistent assistant."""
-        result = storage.assistants.get("nonexistent-id", mock_user.identity)
+        result = await storage.assistants.get("nonexistent-id", mock_user.identity)
         assert result is None
 
-    def test_update_nonexistent_assistant(self, storage: Storage, mock_user):
+    async def test_update_nonexistent_assistant(self, storage: Storage, mock_user):
         """Update returns None for nonexistent assistant."""
-        result = storage.assistants.update(
+        result = await storage.assistants.update(
             "nonexistent-id",
             {"name": "New Name"},
             mock_user.identity,
         )
         assert result is None
 
-    def test_delete_nonexistent_assistant(self, storage: Storage, mock_user):
+    async def test_delete_nonexistent_assistant(self, storage: Storage, mock_user):
         """Delete returns False for nonexistent assistant."""
-        result = storage.assistants.delete("nonexistent-id", mock_user.identity)
+        result = await storage.assistants.delete("nonexistent-id", mock_user.identity)
         assert result is False
 
-    def test_create_requires_graph_id(self, storage: Storage, mock_user):
+    async def test_create_requires_graph_id(self, storage: Storage, mock_user):
         """Create raises ValueError without graph_id."""
         with pytest.raises(ValueError, match="graph_id is required"):
-            storage.assistants.create({}, mock_user.identity)
+            await storage.assistants.create({}, mock_user.identity)
 
-    def test_assistant_id_is_generated(self, storage: Storage, mock_user):
+    async def test_assistant_id_is_generated(self, storage: Storage, mock_user):
         """Create generates unique assistant_id."""
-        a1 = storage.assistants.create({"graph_id": "agent"}, mock_user.identity)
-        a2 = storage.assistants.create({"graph_id": "agent"}, mock_user.identity)
+        a1 = await storage.assistants.create({"graph_id": "agent"}, mock_user.identity)
+        a2 = await storage.assistants.create({"graph_id": "agent"}, mock_user.identity)
 
         assert a1.assistant_id != a2.assistant_id
         assert len(a1.assistant_id) == 32  # UUID hex
 
-    def test_timestamps_are_set(self, storage: Storage, mock_user):
+    async def test_timestamps_are_set(self, storage: Storage, mock_user):
         """Create sets created_at and updated_at."""
-        assistant = storage.assistants.create(
+        assistant = await storage.assistants.create(
             {"graph_id": "agent"},
             mock_user.identity,
         )
@@ -470,9 +482,9 @@ class TestEdgeCases:
         assert assistant.created_at is not None
         assert assistant.updated_at is not None
 
-    def test_update_changes_updated_at(self, storage: Storage, mock_user):
+    async def test_update_changes_updated_at(self, storage: Storage, mock_user):
         """Update modifies updated_at timestamp."""
-        created = storage.assistants.create(
+        created = await storage.assistants.create(
             {"graph_id": "agent"},
             mock_user.identity,
         )
@@ -481,7 +493,7 @@ class TestEdgeCases:
 
         time.sleep(0.01)  # Small delay to ensure different timestamp
 
-        updated = storage.assistants.update(
+        updated = await storage.assistants.update(
             created.assistant_id,
             {"name": "New Name"},
             mock_user.identity,

@@ -60,18 +60,18 @@ def other_user_identity():
 
 
 @pytest.fixture
-def assistant(storage, mock_user_identity):
+async def assistant(storage, mock_user_identity):
     """Create a test assistant."""
-    return storage.assistants.create(
+    return await storage.assistants.create(
         {"graph_id": "agent", "name": "Test Assistant"},
         mock_user_identity,
     )
 
 
 @pytest.fixture
-def thread(storage, mock_user_identity):
+async def thread(storage, mock_user_identity):
     """Create a test thread."""
-    return storage.threads.create({}, mock_user_identity)
+    return await storage.threads.create({}, mock_user_identity)
 
 
 # ============================================================================
@@ -274,7 +274,7 @@ class TestMessageCreation:
 class TestRunStreamStorage:
     """Tests for run stream storage operations."""
 
-    def test_create_run_for_stream(
+    async def test_create_run_for_stream(
         self, storage, mock_user_identity, assistant, thread
     ):
         """Test creating a run for streaming."""
@@ -290,13 +290,13 @@ class TestRunStreamStorage:
             "multitask_strategy": "reject",
         }
 
-        run = storage.runs.create(run_data, mock_user_identity)
+        run = await storage.runs.create(run_data, mock_user_identity)
 
         assert run.run_id is not None
         assert run.status == "running"
         assert run.thread_id == thread.thread_id
 
-    def test_update_run_status_after_stream(
+    async def test_update_run_status_after_stream(
         self, storage, mock_user_identity, assistant, thread
     ):
         """Test updating run status after streaming completes."""
@@ -309,15 +309,17 @@ class TestRunStreamStorage:
             "multitask_strategy": "reject",
         }
 
-        run = storage.runs.create(run_data, mock_user_identity)
+        run = await storage.runs.create(run_data, mock_user_identity)
         assert run.status == "running"
 
         # Update to success
-        updated = storage.runs.update_status(run.run_id, "success", mock_user_identity)
+        updated = await storage.runs.update_status(
+            run.run_id, "success", mock_user_identity
+        )
         assert updated is not None
         assert updated.status == "success"
 
-    def test_thread_state_update_after_stream(
+    async def test_thread_state_update_after_stream(
         self, storage, mock_user_identity, assistant, thread
     ):
         """Test that thread state is updated after streaming."""
@@ -329,13 +331,13 @@ class TestRunStreamStorage:
         }
 
         # Add state snapshot
-        result = storage.threads.add_state_snapshot(
+        result = await storage.threads.add_state_snapshot(
             thread.thread_id, final_values, mock_user_identity
         )
         assert result is True
 
         # Get state
-        state = storage.threads.get_state(thread.thread_id, mock_user_identity)
+        state = await storage.threads.get_state(thread.thread_id, mock_user_identity)
         assert state is not None
 
 
@@ -430,9 +432,9 @@ class TestSSEEventSequence:
 class TestStatelessRunStorage:
     """Tests for stateless run storage operations."""
 
-    def test_create_stateless_thread(self, storage, mock_user_identity):
+    async def test_create_stateless_thread(self, storage, mock_user_identity):
         """Test creating a temporary thread for stateless run."""
-        thread = storage.threads.create(
+        thread = await storage.threads.create(
             {"metadata": {"stateless": True, "on_completion": "delete"}},
             mock_user_identity,
         )
@@ -441,10 +443,12 @@ class TestStatelessRunStorage:
         assert thread.metadata.get("stateless") is True
         assert thread.metadata.get("on_completion") == "delete"
 
-    def test_delete_stateless_resources(self, storage, mock_user_identity, assistant):
+    async def test_delete_stateless_resources(
+        self, storage, mock_user_identity, assistant
+    ):
         """Test deleting stateless resources after completion."""
         # Create temporary thread
-        thread = storage.threads.create(
+        thread = await storage.threads.create(
             {"metadata": {"stateless": True, "on_completion": "delete"}},
             mock_user_identity,
         )
@@ -458,20 +462,22 @@ class TestStatelessRunStorage:
             "kwargs": {},
             "multitask_strategy": "reject",
         }
-        run = storage.runs.create(run_data, mock_user_identity)
+        run = await storage.runs.create(run_data, mock_user_identity)
 
         # Delete resources (simulating on_completion="delete")
-        deleted_run = storage.runs.delete_by_thread(
+        deleted_run = await storage.runs.delete_by_thread(
             thread.thread_id, run.run_id, mock_user_identity
         )
-        deleted_thread = storage.threads.delete(thread.thread_id, mock_user_identity)
+        deleted_thread = await storage.threads.delete(
+            thread.thread_id, mock_user_identity
+        )
 
         assert deleted_run is True
         assert deleted_thread is True
 
         # Verify resources are gone
-        assert storage.runs.get(run.run_id, mock_user_identity) is None
-        assert storage.threads.get(thread.thread_id, mock_user_identity) is None
+        assert await storage.runs.get(run.run_id, mock_user_identity) is None
+        assert await storage.threads.get(thread.thread_id, mock_user_identity) is None
 
 
 # ============================================================================
@@ -911,5 +917,7 @@ class TestExecuteRunStreamIntegration:
                 pass
 
             # Check thread state was updated
-            state = storage.threads.get_state(thread.thread_id, mock_user_identity)
+            state = await storage.threads.get_state(
+                thread.thread_id, mock_user_identity
+            )
             assert state is not None

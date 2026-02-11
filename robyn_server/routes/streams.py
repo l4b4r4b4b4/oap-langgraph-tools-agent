@@ -180,18 +180,20 @@ def register_stream_routes(app: Robyn) -> None:
         storage = get_storage()
 
         # Check if thread exists
-        thread = storage.threads.get(thread_id, user.identity)
+        thread = await storage.threads.get(thread_id, user.identity)
         if thread is None:
             if create_data.if_not_exists == "create":
-                thread = storage.threads.create({}, user.identity)
+                thread = await storage.threads.create({}, user.identity)
                 thread_id = thread.thread_id
             else:
                 return error_response(f"Thread {thread_id} not found", 404)
 
         # Check if assistant exists
-        assistant = storage.assistants.get(create_data.assistant_id, user.identity)
+        assistant = await storage.assistants.get(
+            create_data.assistant_id, user.identity
+        )
         if assistant is None:
-            assistants = storage.assistants.list(user.identity)
+            assistants = await storage.assistants.list(user.identity)
             assistant = next(
                 (a for a in assistants if a.graph_id == create_data.assistant_id),
                 None,
@@ -202,7 +204,7 @@ def register_stream_routes(app: Robyn) -> None:
                 )
 
         # Check for multitask conflicts
-        active_run = storage.runs.get_active_run(thread_id, user.identity)
+        active_run = await storage.runs.get_active_run(thread_id, user.identity)
         if active_run:
             strategy = create_data.multitask_strategy
             if strategy == "reject":
@@ -212,11 +214,13 @@ def register_stream_routes(app: Robyn) -> None:
                     409,
                 )
             elif strategy == "interrupt":
-                storage.runs.update_status(
+                await storage.runs.update_status(
                     active_run.run_id, "interrupted", user.identity
                 )
             elif strategy == "rollback":
-                storage.runs.update_status(active_run.run_id, "error", user.identity)
+                await storage.runs.update_status(
+                    active_run.run_id, "error", user.identity
+                )
 
         # Build run data
         run_data: dict[str, Any] = {
@@ -236,8 +240,8 @@ def register_stream_routes(app: Robyn) -> None:
             "multitask_strategy": create_data.multitask_strategy,
         }
 
-        run = storage.runs.create(run_data, user.identity)
-        storage.threads.update(thread_id, {"status": "busy"}, user.identity)
+        run = await storage.runs.create(run_data, user.identity)
+        await storage.threads.update(thread_id, {"status": "busy"}, user.identity)
 
         # Create the SSE generator
         async def stream_generator() -> AsyncGenerator[str, None]:
@@ -257,8 +261,10 @@ def register_stream_routes(app: Robyn) -> None:
                 yield format_error_event(str(stream_error))
             finally:
                 # Update run status and thread status
-                storage.runs.update_status(run.run_id, "success", user.identity)
-                storage.threads.update(thread_id, {"status": "idle"}, user.identity)
+                await storage.runs.update_status(run.run_id, "success", user.identity)
+                await storage.threads.update(
+                    thread_id, {"status": "idle"}, user.identity
+                )
 
         # Return SSE response with proper headers
         headers = sse_headers(thread_id=thread_id, run_id=run.run_id)
@@ -298,12 +304,12 @@ def register_stream_routes(app: Robyn) -> None:
         storage = get_storage()
 
         # Check if thread exists
-        thread = storage.threads.get(thread_id, user.identity)
+        thread = await storage.threads.get(thread_id, user.identity)
         if thread is None:
             return error_response(f"Thread {thread_id} not found", 404)
 
         # Check if run exists
-        run = storage.runs.get_by_thread(thread_id, run_id, user.identity)
+        run = await storage.runs.get_by_thread(thread_id, run_id, user.identity)
         if run is None:
             return error_response(f"Run {run_id} not found", 404)
 
@@ -313,7 +319,7 @@ def register_stream_routes(app: Robyn) -> None:
             yield format_metadata_event(run_id, attempt=1)
 
             # Emit current values from thread state
-            state = storage.threads.get_state(thread_id, user.identity)
+            state = await storage.threads.get_state(thread_id, user.identity)
             if state and state.values:
                 yield format_values_event(
                     state.values
@@ -361,12 +367,12 @@ def register_stream_routes(app: Robyn) -> None:
         storage = get_storage()
 
         # Check if thread exists
-        thread = storage.threads.get(thread_id, user.identity)
+        thread = await storage.threads.get(thread_id, user.identity)
         if thread is None:
             return error_response(f"Thread {thread_id} not found", 404)
 
         # Find the most recent run for this thread
-        runs = storage.runs.list_by_thread(thread_id, user.identity, limit=1)
+        runs = await storage.runs.list_by_thread(thread_id, user.identity, limit=1)
         most_recent_run = runs[0] if runs else None
         run_id = most_recent_run.run_id if most_recent_run else "no-run"
 
@@ -376,7 +382,7 @@ def register_stream_routes(app: Robyn) -> None:
             yield format_metadata_event(run_id, attempt=1)
 
             # Emit current thread state
-            state = storage.threads.get_state(thread_id, user.identity)
+            state = await storage.threads.get_state(thread_id, user.identity)
             if state and state.values:
                 yield format_values_event(
                     state.values
@@ -433,9 +439,11 @@ def register_stream_routes(app: Robyn) -> None:
         storage = get_storage()
 
         # Check if assistant exists
-        assistant = storage.assistants.get(create_data.assistant_id, user.identity)
+        assistant = await storage.assistants.get(
+            create_data.assistant_id, user.identity
+        )
         if assistant is None:
-            assistants = storage.assistants.list(user.identity)
+            assistants = await storage.assistants.list(user.identity)
             assistant = next(
                 (a for a in assistants if a.graph_id == create_data.assistant_id),
                 None,
@@ -446,7 +454,7 @@ def register_stream_routes(app: Robyn) -> None:
                 )
 
         # Create a temporary thread for stateless execution
-        temp_thread = storage.threads.create(
+        temp_thread = await storage.threads.create(
             {
                 "metadata": {
                     "stateless": True,
@@ -475,7 +483,7 @@ def register_stream_routes(app: Robyn) -> None:
             "multitask_strategy": create_data.multitask_strategy,
         }
 
-        run = storage.runs.create(run_data, user.identity)
+        run = await storage.runs.create(run_data, user.identity)
 
         # Create the SSE generator
         async def stream_generator() -> AsyncGenerator[str, None]:
@@ -495,13 +503,15 @@ def register_stream_routes(app: Robyn) -> None:
                 yield format_error_event(str(stream_error))
             finally:
                 # Update run status
-                storage.runs.update_status(run.run_id, "success", user.identity)
+                await storage.runs.update_status(run.run_id, "success", user.identity)
 
                 # Handle on_completion behavior
                 if create_data.on_completion == "delete":
                     # Delete thread and run for stateless execution
-                    storage.runs.delete_by_thread(thread_id, run.run_id, user.identity)
-                    storage.threads.delete(thread_id, user.identity)
+                    await storage.runs.delete_by_thread(
+                        thread_id, run.run_id, user.identity
+                    )
+                    await storage.threads.delete(thread_id, user.identity)
 
         # Return SSE response with stateless headers
         headers = sse_headers(run_id=run.run_id, stateless=True)
@@ -759,5 +769,5 @@ async def execute_run_stream(
     yield format_values_event(final_values)
 
     # Store the final state in the thread
-    storage.threads.add_state_snapshot(thread_id, final_values, owner_id)
-    storage.threads.update(thread_id, {"values": final_values}, owner_id)
+    await storage.threads.add_state_snapshot(thread_id, final_values, owner_id)
+    await storage.threads.update(thread_id, {"values": final_values}, owner_id)

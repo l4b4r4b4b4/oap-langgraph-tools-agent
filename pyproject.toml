@@ -41,7 +41,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-asyncio_mode = "strict"
+asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["robyn_server/tests"]
 norecursedirs = ["archive", ".agent", ".venv", "__pycache__"]

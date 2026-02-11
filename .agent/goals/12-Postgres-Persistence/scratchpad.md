@@ -3,8 +3,8 @@
 > **Status**: 🟡 In Progress
 > **Priority**: P1 (High)
 > **Created**: 2026-02-11
-> **Updated**: 2026-02-12
-> **Progress**: Tasks 01 + 02 complete (DB module + checkpointer/store wired + live E2E verified)
+> **Updated**: 2026-02-13
+> **Progress**: Tasks 01 + 02 + 03 complete, Task-04 (Integration Testing) remaining
 
 ## Overview
 
@@ -19,12 +19,12 @@ Integrate Postgres persistence into the LangGraph tools agent and Robyn runtime 
 - [ ] `AsyncPostgresSaver` (LangGraph checkpointer) wired into agent compilation — conversation state persists across restarts
 - [ ] `AsyncPostgresStore` (LangGraph store) wired into agent compilation — cross-thread memory available
 - [ ] `.setup()` called at startup for both checkpointer and store (auto-creates tables)
-- [ ] Robyn runtime storage (`storage.py`) backed by Postgres instead of in-memory dicts
-- [ ] Custom `langgraph_server` schema created for Robyn runtime tables (assistants, threads, runs, crons, store_items)
-- [ ] Same `Storage` interface preserved — route handlers require zero changes
-- [ ] Falls back to in-memory storage when `DATABASE_URL` is not set (backward compatible)
-- [ ] Persistence verified across server restarts
-- [ ] All existing tests continue to pass
+- [x] Robyn runtime storage (`storage.py`) backed by Postgres instead of in-memory dicts
+- [x] Custom `langgraph_server` schema created for Robyn runtime tables (assistants, threads, runs, crons, store_items, thread_states)
+- [x] Same `Storage` interface preserved — route handlers require zero changes
+- [x] Falls back to in-memory storage when `DATABASE_URL` is not set (backward compatible)
+- [ ] Persistence verified across server restarts (Task-04)
+- [x] All existing tests continue to pass (440/440)
 
 ## Context & Background
 
@@ -106,7 +106,7 @@ async with (
 |---------|-------------|--------|------------|
 | Task-01 | Dependencies & DB Module — `DATABASE_URL` config, connection pool, `database.py` module, RLS hardening | 🟢 | Goal 11 (packages already added) |
 | Task-02 | LangGraph Checkpointer + Store — wire into `create_agent()`, live E2E persistence verified | 🟢 | Task-01 |
-| Task-03 | Robyn Storage → Postgres — `langgraph_server` schema DDL, Postgres-backed store implementations, same `Storage` interface | ⚪ | Task-01 |
+| Task-03 | Robyn Storage → Postgres — async migration + `langgraph_server` schema DDL + Postgres-backed stores | 🟢 | Task-01 |
 | Task-04 | Integration Testing — persistence across restarts, conversation memory, thread history, Robyn CRUD | ⚪ | Task-02, Task-03 |
 
 ## Architecture
@@ -135,12 +135,13 @@ postgres (database)
   ├── public.*                    — existing Supabase app tables (untouched)
   ├── checkpoint_*                — LangGraph checkpointer tables (auto-created by .setup())
   ├── store.*                     — LangGraph store tables (auto-created by .setup())
-  └── langgraph_server.*          — Robyn runtime tables (our DDL)
-      ├── assistants
-      ├── threads
-      ├── runs
-      ├── store_items
-      └── crons
+  └── langgraph_server.*          — Robyn runtime tables (our DDL, created by PostgresStorage.run_migrations())
+      ├── assistants              — assistant definitions with versioning
+      ├── threads                 — thread metadata and current values
+      ├── thread_states           — state history snapshots (FK CASCADE to threads)
+      ├── runs                    — run execution records
+      ├── store_items             — key-value store with owner isolation
+      └── crons                   — scheduled job definitions
 ```
 
 ### Storage Interface (unchanged)
@@ -173,18 +174,23 @@ The `get_storage()` function returns either `InMemoryStorage` (no DATABASE_URL) 
 - **Upstream**: Goal 11 (`create_agent` migration + `langgraph-checkpoint-postgres` dependency)
 - **Downstream**: Future goals (checkpoint encryption, TTL policies, Redis streaming)
 
-## Files to Create/Modify
+## Files Created/Modified
 
-### New Files
-- `robyn_server/database.py` — connection pool management, setup logic
-- `robyn_server/postgres_storage.py` — Postgres-backed Storage implementations
+### Created Files
+- `robyn_server/database.py` — connection pool management, setup logic, DDL migration ✅
+- `robyn_server/postgres_storage.py` — Postgres-backed Storage implementations (~1636 lines) ✅
 
 ### Modified Files
-- `robyn_server/config.py` — add `DatabaseConfig` dataclass with `DATABASE_URL`
-- `robyn_server/storage.py` — `get_storage()` returns Postgres or in-memory based on config
-- `robyn_server/app.py` or `robyn_server/__main__.py` — startup logic for pool + `.setup()`
-- `tools_agent/agent.py` — accept and pass `checkpointer` + `store` to `create_agent()`
-- `robyn_server/routes/streams.py` — pass checkpointer/store when building agent
+- `robyn_server/config.py` — `DatabaseConfig` dataclass with `DATABASE_URL` ✅
+- `robyn_server/storage.py` — all methods `async def` + `get_storage()` Postgres switch ✅
+- `robyn_server/app.py` — startup/shutdown handlers for pool + `.setup()` ✅
+- `tools_agent/agent.py` — checkpointer + store wiring ✅
+- `robyn_server/routes/*.py` — `await` added to all storage calls ✅
+- `robyn_server/crons/handlers.py` — `await` added ✅
+- `robyn_server/a2a/handlers.py` — `await` added ✅
+- `robyn_server/routes/streams.py` — `await` added + bug fix (missing await on final state store) ✅
+- `pyproject.toml` — `asyncio_mode = "auto"` ✅
+- All 7 test files — converted to async ✅
 
 ## Notes & Decisions
 
@@ -204,11 +210,33 @@ The `get_storage()` function returns either `InMemoryStorage` (no DATABASE_URL) 
 
 ### Open Questions
 
-- [x] Should the connection pool be shared between LangGraph checkpointer/store and our runtime storage? → **YES** — single `AsyncConnectionPool` shared by checkpointer, store, and future runtime storage. Both accept `Union[AsyncConnection, AsyncConnectionPool]` as `conn` param.
+- [x] Should the connection pool be shared between LangGraph checkpointer/store and our runtime storage? → **YES** — single `AsyncConnectionPool` shared by checkpointer, store, and runtime `PostgresStorage`. Both accept `Union[AsyncConnection, AsyncConnectionPool]` as `conn` param.
 - [x] What connection pool size is appropriate? → **min=2, max=10** (configurable via `DATABASE_POOL_MIN_SIZE`/`DATABASE_POOL_MAX_SIZE` env vars)
 - [x] Should we add health check for Postgres connectivity to the `/health` endpoint? → **YES** — `/health` returns `"persistence": "postgres"` or `"persistence": "in-memory"`
-- [ ] Do we need to handle Postgres connection drops gracefully mid-stream? (retry logic)
+- [x] How to handle sync→async migration for storage methods? → **Option A: make all methods async** — in-memory methods are trivially async, Postgres methods naturally async. All route handlers already `async def` so adding `await` is mechanical.
+- [ ] Do we need to handle Postgres connection drops gracefully mid-stream? (retry logic — future enhancement)
 - [ ] Should `chat_sessions.thread_id` in the existing `public` schema be linked to LangGraph thread IDs? (cross-system integration)
+
+### Task-03 Complete (All 3 Phases)
+
+**Phase 1 — Async Migration ✅:**
+- All storage methods in `storage.py` converted to `async def` (6 classes, ~30 methods)
+- All route handlers + handler modules updated with `await`
+- All 7 test files converted to async — **440/440 tests passing**
+- Production bug fix: `streams.py` had missing `await` on final state store calls
+
+**Phase 2 — Postgres Storage Implementation ✅:**
+- Created `robyn_server/postgres_storage.py` (~1636 lines) with 5 Postgres store classes + container
+- Added `_create_langgraph_server_schema()` DDL migration to `database.py`
+- Wired `get_storage()` to return `PostgresStorage` when `is_postgres_enabled()`
+- 6 tables + 2 indexes created in `langgraph_server` schema
+
+**Phase 3 — Verification ✅:**
+- 440/440 tests pass, ruff clean
+- DDL migration verified against Supabase Postgres (6 tables, 8 indexes)
+- Full E2E test: CRUD on all 5 stores against real Postgres
+- `get_storage()` switch verified: `Storage` without Postgres, `PostgresStorage` with Postgres
+- Idempotent DDL: re-runs cleanly without errors
 
 ## References
 

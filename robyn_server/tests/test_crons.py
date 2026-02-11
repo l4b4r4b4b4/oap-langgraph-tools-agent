@@ -57,10 +57,10 @@ def owner_id():
 
 
 @pytest.fixture
-def assistant_id(owner_id):
+async def assistant_id(owner_id):
     """Create a test assistant and return its ID."""
     storage = get_storage()
-    assistant = storage.assistants.create(
+    assistant = await storage.assistants.create(
         {"graph_id": "test-graph", "config": {}},
         owner_id,
     )
@@ -523,7 +523,7 @@ class TestCronScheduler:
         assert scheduler._started is False
         mock_apscheduler.shutdown.assert_called_once_with(wait=False)
 
-    def test_add_cron_job(self, owner_id, assistant_id):
+    async def test_add_cron_job(self, owner_id, assistant_id):
         """Test adding a cron job."""
         scheduler = CronScheduler()
         mock_apscheduler = MagicMock()
@@ -550,7 +550,7 @@ class TestCronScheduler:
         assert "cron-123" in scheduler._job_owner_map
         assert scheduler._job_owner_map["cron-123"] == owner_id
 
-    def test_remove_cron_job(self, owner_id, assistant_id):
+    async def test_remove_cron_job(self, owner_id, assistant_id):
         """Test removing a cron job."""
         scheduler = CronScheduler()
         mock_apscheduler = MagicMock()
@@ -575,7 +575,7 @@ class TestCronScheduler:
         # Should return False when job not found (exception caught)
         assert result is False
 
-    def test_get_job_info(self, owner_id, assistant_id):
+    async def test_get_job_info(self, owner_id, assistant_id):
         """Test getting job info."""
         scheduler = CronScheduler()
         mock_apscheduler = MagicMock()
@@ -604,7 +604,7 @@ class TestCronScheduler:
 
         assert info is None
 
-    def test_list_jobs(self, owner_id, assistant_id):
+    async def test_list_jobs(self, owner_id, assistant_id):
         """Test listing all jobs."""
         scheduler = CronScheduler()
         mock_apscheduler = MagicMock()
@@ -657,7 +657,7 @@ class TestCronScheduler:
 class TestCronStorage:
     """Tests for CronStore in storage."""
 
-    def test_cron_store_create(self, owner_id):
+    async def test_cron_store_create(self, owner_id):
         """Test creating a cron in storage."""
         storage = get_storage()
 
@@ -668,13 +668,13 @@ class TestCronStorage:
             "payload": {"assistant_id": "assistant-123"},
         }
 
-        cron = storage.crons.create(cron_data, owner_id)
+        cron = await storage.crons.create(cron_data, owner_id)
 
         assert cron.cron_id is not None
         assert cron.schedule == "*/5 * * * *"
         assert cron.created_at is not None
 
-    def test_cron_store_get(self, owner_id):
+    async def test_cron_store_get(self, owner_id):
         """Test getting a cron from storage."""
         storage = get_storage()
 
@@ -685,13 +685,13 @@ class TestCronStorage:
             "payload": {"assistant_id": "assistant-123"},
         }
 
-        created = storage.crons.create(cron_data, owner_id)
-        retrieved = storage.crons.get(created.cron_id, owner_id)
+        created = await storage.crons.create(cron_data, owner_id)
+        retrieved = await storage.crons.get(created.cron_id, owner_id)
 
         assert retrieved is not None
         assert retrieved.cron_id == created.cron_id
 
-    def test_cron_store_get_wrong_owner(self, owner_id):
+    async def test_cron_store_get_wrong_owner(self, owner_id):
         """Test getting a cron with wrong owner fails."""
         storage = get_storage()
 
@@ -702,12 +702,12 @@ class TestCronStorage:
             "payload": {"assistant_id": "assistant-123"},
         }
 
-        created = storage.crons.create(cron_data, owner_id)
-        retrieved = storage.crons.get(created.cron_id, "other-owner")
+        created = await storage.crons.create(cron_data, owner_id)
+        retrieved = await storage.crons.get(created.cron_id, "other-owner")
 
         assert retrieved is None
 
-    def test_cron_store_list(self, owner_id):
+    async def test_cron_store_list(self, owner_id):
         """Test listing crons from storage."""
         storage = get_storage()
 
@@ -718,13 +718,13 @@ class TestCronStorage:
                 "schedule": "*/5 * * * *",
                 "payload": {"assistant_id": f"assistant-{i}"},
             }
-            storage.crons.create(cron_data, owner_id)
+            await storage.crons.create(cron_data, owner_id)
 
-        crons = storage.crons.list(owner_id)
+        crons = await storage.crons.list(owner_id)
 
         assert len(crons) == 3
 
-    def test_cron_store_list_with_filter(self, owner_id):
+    async def test_cron_store_list_with_filter(self, owner_id):
         """Test listing crons with filter."""
         storage = get_storage()
 
@@ -734,17 +734,17 @@ class TestCronStorage:
             "schedule": "*/5 * * * *",
             "payload": {"assistant_id": "assistant-123"},
         }
-        storage.crons.create(cron_data, owner_id)
+        await storage.crons.create(cron_data, owner_id)
 
         # Filter matches
-        crons = storage.crons.list(owner_id, assistant_id="assistant-123")
+        crons = await storage.crons.list(owner_id, assistant_id="assistant-123")
         assert len(crons) == 1
 
         # Filter doesn't match
-        crons = storage.crons.list(owner_id, assistant_id="other")
+        crons = await storage.crons.list(owner_id, assistant_id="other")
         assert len(crons) == 0
 
-    def test_cron_store_update(self, owner_id):
+    async def test_cron_store_update(self, owner_id):
         """Test updating a cron in storage."""
         storage = get_storage()
 
@@ -755,10 +755,10 @@ class TestCronStorage:
             "payload": {"assistant_id": "assistant-123"},
         }
 
-        created = storage.crons.create(cron_data, owner_id)
+        created = await storage.crons.create(cron_data, owner_id)
         next_run = datetime.now(timezone.utc) + timedelta(hours=1)
 
-        updated = storage.crons.update(
+        updated = await storage.crons.update(
             created.cron_id,
             owner_id,
             {"next_run_date": next_run},
@@ -767,7 +767,7 @@ class TestCronStorage:
         assert updated is not None
         assert updated.next_run_date == next_run
 
-    def test_cron_store_delete(self, owner_id):
+    async def test_cron_store_delete(self, owner_id):
         """Test deleting a cron from storage."""
         storage = get_storage()
 
@@ -778,15 +778,15 @@ class TestCronStorage:
             "payload": {"assistant_id": "assistant-123"},
         }
 
-        created = storage.crons.create(cron_data, owner_id)
-        deleted = storage.crons.delete(created.cron_id, owner_id)
+        created = await storage.crons.create(cron_data, owner_id)
+        deleted = await storage.crons.delete(created.cron_id, owner_id)
 
         assert deleted is True
 
-        retrieved = storage.crons.get(created.cron_id, owner_id)
+        retrieved = await storage.crons.get(created.cron_id, owner_id)
         assert retrieved is None
 
-    def test_cron_store_count(self, owner_id):
+    async def test_cron_store_count(self, owner_id):
         """Test counting crons in storage."""
         storage = get_storage()
 
@@ -797,16 +797,16 @@ class TestCronStorage:
                 "schedule": "*/5 * * * *",
                 "payload": {"assistant_id": "assistant-123"},
             }
-            storage.crons.create(cron_data, owner_id)
+            await storage.crons.create(cron_data, owner_id)
 
-        count = storage.crons.count(owner_id)
+        count = await storage.crons.count(owner_id)
         assert count == 5
 
         # Count with filter
-        count = storage.crons.count(owner_id, assistant_id="assistant-123")
+        count = await storage.crons.count(owner_id, assistant_id="assistant-123")
         assert count == 5
 
-        count = storage.crons.count(owner_id, assistant_id="other")
+        count = await storage.crons.count(owner_id, assistant_id="other")
         assert count == 0
 
 
