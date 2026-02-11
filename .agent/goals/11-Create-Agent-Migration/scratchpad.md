@@ -1,6 +1,6 @@
 # Goal 11: Package Upgrade & `create_agent` Migration
 
-> **Status**: ⚪ Not Started
+> **Status**: 🟢 Complete
 > **Priority**: P1 (High)
 > **Created**: 2026-02-11
 > **Updated**: 2026-02-11
@@ -11,15 +11,15 @@ Upgrade all LangChain/LangGraph packages to their latest stable versions and mig
 
 ## Success Criteria
 
-- [ ] All langchain/langgraph packages upgraded to latest stable versions
-- [ ] `langgraph-checkpoint-postgres` and `psycopg[binary,pool]` added as dependencies (prep for Goal 12)
-- [ ] `tools_agent/agent.py` migrated from `create_react_agent` to `create_agent`
-- [ ] `prompt=` → `system_prompt=` parameter rename applied
-- [ ] `config_schema=GraphConfigPydantic` handling adapted for new API
-- [ ] Streaming node name references updated in `robyn_server/routes/streams.py` (`"agent"` → `"model"`)
-- [ ] SSE streaming verified end-to-end
-- [ ] All existing tests pass
-- [ ] No regressions in Robyn runtime behavior
+- [x] All langchain/langgraph packages upgraded to latest stable versions
+- [x] `langgraph-checkpoint-postgres` and `psycopg[binary,pool]` added as dependencies (prep for Goal 12)
+- [x] `tools_agent/agent.py` migrated from `create_react_agent` to `create_agent`
+- [x] `prompt=` → `system_prompt=` parameter rename applied
+- [x] `config_schema=GraphConfigPydantic` handling adapted for new API (removed — not a param of `create_agent`)
+- [x] Streaming node name references updated in `robyn_server/routes/streams.py` (`"agent"` → `"model"`)
+- [x] SSE streaming verified end-to-end (live test with Ministral-3B via vLLM)
+- [x] All existing tests pass (440 passed, 0 failures)
+- [x] No regressions in Robyn runtime behavior
 
 ## Context & Background
 
@@ -75,10 +75,10 @@ Upgrade all LangChain/LangGraph packages to their latest stable versions and mig
 
 | Task ID | Description | Status | Depends On |
 |---------|-------------|--------|------------|
-| Task-01 | Package Upgrades — upgrade all langchain/langgraph to latest, add checkpoint-postgres | ⚪ | - |
-| Task-02 | Agent Migration — `create_react_agent` → `create_agent` in `agent.py` | ⚪ | Task-01 |
-| Task-03 | Streaming Compatibility — fix node name refs in `streams.py` | ⚪ | Task-02 |
-| Task-04 | Testing — full pipeline verification | ⚪ | Task-03 |
+| Task-01 | Package Upgrades — upgrade all langchain/langgraph to latest, add checkpoint-postgres | 🟢 | - |
+| Task-02 | Agent Migration — `create_react_agent` → `create_agent` in `agent.py` | 🟢 | Task-01 |
+| Task-03 | Streaming Compatibility — fix node name refs in `streams.py` | 🟢 | Task-02 |
+| Task-04 | Testing — full pipeline verification | 🟢 | Task-03 |
 
 ## Risks & Mitigations
 
@@ -112,11 +112,35 @@ Upgrade all LangChain/LangGraph packages to their latest stable versions and mig
 | 2026-02-11 | Add checkpoint-postgres dep in Task-01 | Avoid a second dependency churn for Goal 12 |
 | 2026-02-11 | Keep `GraphConfigPydantic` as-is | It's manually parsed in `graph()` already; config_schema was only for LangGraph runtime introspection |
 
-### Open Questions
+### Open Questions (Resolved)
 
-- [ ] Does `create_agent` support `astream_events` the same way as `create_react_agent`? (verify in Task-03)
-- [ ] Should we adopt middleware for the dynamic model selection logic? (defer to future enhancement)
-- [ ] Is the `langgraph-api==0.7.9` pin still needed/compatible with latest langgraph? (check in Task-01)
+- [x] Does `create_agent` support `astream_events` the same way as `create_react_agent`? → **Yes** — confirmed via live SSE streaming test. Same v2 events, just node name changed from `"agent"` to `"model"`.
+- [x] Should we adopt middleware for the dynamic model selection logic? → **Deferred** — existing manual config parsing in `graph()` works. Middleware is a future enhancement.
+- [x] Is the `langgraph-api==0.7.9` pin still needed/compatible with latest langgraph? → **Removed entirely** — no imports exist in codebase; `langgraph-cli[inmem]` dev dep provides it for `langgraph dev` workflow.
+
+## Completion Summary
+
+**Completed**: 2026-02-11
+
+### Final Package Versions
+| Package | Before | After |
+|---------|--------|-------|
+| `langgraph` | 1.0.7 | **1.0.8** |
+| `langchain` | 1.2.7 | **1.2.10** |
+| `langchain-core` | 1.2.7 | **1.2.11** |
+| `langchain-openai` | 1.1.7 | **1.1.9** |
+| `langchain-anthropic` | 1.3.1 | **1.3.3** |
+| `langgraph-checkpoint-postgres` | ❌ | **3.0.4** (new) |
+| `psycopg[binary,pool]` | ❌ | **3.3.2** (new) |
+| `langgraph-api` | ==0.7.9 | **removed** from runtime deps |
+
+### Commits
+1. `d1279cb` — Task-01: Package upgrades + pytest config fixes
+2. `ab61422` — Task-02+03: `create_agent` migration + streaming node name fix
+
+### Live Verification
+- Ministral-3B via vLLM → Robyn SSE streaming → Supabase auth: **all working**
+- 440 unit tests passing, ruff clean
 
 ## References
 
