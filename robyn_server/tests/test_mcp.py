@@ -707,8 +707,14 @@ class TestAgentModule:
             "configurable": {
                 "model_name": "anthropic:claude-sonnet-4-0",
                 "mcp_config": {
-                    "url": "http://math-svc/api",
-                    "tools": ["Math_Add", "Math_Sub"],
+                    "servers": [
+                        {
+                            "name": "math",
+                            "url": "http://math-svc/api",
+                            "tools": ["Math_Add", "Math_Sub"],
+                            "auth_required": False,
+                        },
+                    ],
                 },
                 "rag": {
                     "rag_url": "http://rag/api",
@@ -724,7 +730,7 @@ class TestAgentModule:
             info = await get_agent_tool_info()
 
         assert info["model_name"] == "anthropic:claude-sonnet-4-0"
-        assert info["mcp_tools"] == ["Math_Add", "Math_Sub"]
+        assert info["mcp_tools"] == sorted(["Math_Add", "Math_Sub"])
         assert info["mcp_url"] == "http://math-svc/api"
         assert info["rag_collections"] == ["col-uuid-1"]
         assert info["rag_url"] == "http://rag/api"

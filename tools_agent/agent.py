@@ -98,22 +98,37 @@ class RagConfig(BaseModel):
     """The collections to use for rag"""
 
 
-class MCPConfig(BaseModel):
-    url: Optional[str] = Field(
-        default=None,
+class MCPServerConfig(BaseModel):
+    """Configuration for a single MCP server.
+
+    Attributes:
+        name: Stable identifier for this server entry. Used as the key when
+            creating the MultiServerMCPClient config dict.
+        url: Base URL for the MCP server (may or may not end with /mcp).
+        tools: Optional list of tool names to expose from this server.
+            If omitted/None, all tools from the server are exposed.
+        auth_required: Whether this server requires auth token exchange.
+    """
+
+    name: str = Field(
+        default="default",
         optional=True,
     )
-    """The URL of the MCP server"""
+    url: str
     tools: Optional[List[str]] = Field(
         default=None,
         optional=True,
     )
-    """The tools to make available to the LLM"""
-    auth_required: Optional[bool] = Field(
+    auth_required: bool = Field(
         default=False,
         optional=True,
     )
-    """Whether the MCP server requires authentication"""
+
+
+class MCPConfig(BaseModel):
+    """Multi-server MCP configuration (no backward compatibility)."""
+
+    servers: List[MCPServerConfig] = Field(default_factory=list)
 
 
 class GraphConfigPydantic(BaseModel):
@@ -197,10 +212,6 @@ class GraphConfigPydantic(BaseModel):
         metadata={
             "x_oap_ui_config": {
                 "type": "mcp",
-                # Here is where you would set the default tools.
-                # "default": {
-                #     "tools": ["Math_Divide", "Math_Mod"]
-                # }
             }
         },
     )
@@ -320,54 +331,85 @@ async def graph(config: RunnableConfig):
             )
             tools.append(rag_tool)
 
-    if cfg.mcp_config and cfg.mcp_config.auth_required:
-        mcp_tokens = await fetch_tokens(config)
-    else:
-        mcp_tokens = None
-    if (
-        cfg.mcp_config
-        and cfg.mcp_config.url
-        and (mcp_tokens or not cfg.mcp_config.auth_required)
-    ):
-        # Append /mcp only if the URL doesn't already end with it.
-        # External MCP servers (e.g. https://docs.langchain.com/mcp)
-        # provide the full endpoint; OAP-internal servers use a base URL
-        # where the MCP endpoint lives at <base>/mcp.
-        raw_url = cfg.mcp_config.url.rstrip("/")
-        server_url = raw_url if raw_url.endswith("/mcp") else raw_url + "/mcp"
-        headers = {}
-        if mcp_tokens:
-            headers["Authorization"] = f"Bearer {mcp_tokens['access_token']}"
+    if cfg.mcp_config and cfg.mcp_config.servers:
+        mcp_server_entries: dict[str, dict] = {}
+        server_tool_filters: dict[str, set[str] | None] = {}
+        any_auth_required = any(
+            server.auth_required for server in cfg.mcp_config.servers
+        )
 
-        try:
-            # Each MCP server is a FastMCP streaming service on the cluster.
-            # MultiServerMCPClient handles connection lifecycle, tool
-            # conversion, and protocol compliance automatically.
-            mcp_client = MultiServerMCPClient(
-                {
-                    "default": {
-                        "transport": "http",
-                        "url": server_url,
-                        "headers": headers,
-                    }
-                },
-                tool_interceptors=[handle_interaction_required],
+        if any_auth_required:
+            mcp_tokens = await fetch_tokens(config)
+        else:
+            mcp_tokens = None
+
+        for server in cfg.mcp_config.servers:
+            # Append /mcp only if the URL doesn't already end with it.
+            raw_url = server.url.rstrip("/")
+            server_url = raw_url if raw_url.endswith("/mcp") else raw_url + "/mcp"
+
+            headers: dict[str, str] = {}
+            if server.auth_required:
+                if not mcp_tokens:
+                    # Auth required but token exchange failed / not available.
+                    # Skip connecting to this server.
+                    logger.warning(
+                        "MCP server skipped (auth required but no tokens): name=%s url=%s",
+                        server.name,
+                        _safe_mask_url(server_url),
+                    )
+                    continue
+                headers["Authorization"] = f"Bearer {mcp_tokens['access_token']}"
+
+            # Ensure unique keys for MultiServerMCPClient config
+            server_key = server.name or "default"
+            if server_key in mcp_server_entries:
+                # Deterministic de-dupe by suffixing with an index.
+                index = 2
+                while f"{server_key}-{index}" in mcp_server_entries:
+                    index += 1
+                server_key = f"{server_key}-{index}"
+
+            mcp_server_entries[server_key] = {
+                "transport": "http",
+                "url": server_url,
+                "headers": headers,
+            }
+            server_tool_filters[server_key] = (
+                set(server.tools) if server.tools else None
             )
-            mcp_tools = await mcp_client.get_tools()
 
-            # Filter by tool names if specified (empty/None = load all tools)
-            if cfg.mcp_config.tools:
-                tool_names_requested = set(cfg.mcp_config.tools)
-                mcp_tools = [t for t in mcp_tools if t.name in tool_names_requested]
+        if mcp_server_entries:
+            try:
+                mcp_client = MultiServerMCPClient(
+                    mcp_server_entries,
+                    tool_interceptors=[handle_interaction_required],
+                )
+                mcp_tools = await mcp_client.get_tools()
 
-            tools.extend(mcp_tools)
-            logger.info(
-                "MCP tools loaded: count=%d server=%s",
-                len(mcp_tools),
-                _safe_mask_url(server_url),
-            )
-        except Exception as e:
-            logger.warning("Failed to fetch MCP tools: %s", str(e))
+                # Apply per-server filtering when requested.
+                filtered_tools = []
+                for tool in mcp_tools:
+                    tool_origin = getattr(tool, "server_name", None)
+                    if tool_origin and tool_origin in server_tool_filters:
+                        requested = server_tool_filters[tool_origin]
+                        if requested is None or tool.name in requested:
+                            filtered_tools.append(tool)
+                    else:
+                        # If origin is unknown, include it (conservative).
+                        filtered_tools.append(tool)
+
+                tools.extend(filtered_tools)
+                logger.info(
+                    "MCP tools loaded: count=%d servers=%s",
+                    len(filtered_tools),
+                    [
+                        _safe_mask_url(entry["url"])
+                        for entry in mcp_server_entries.values()
+                    ],
+                )
+            except Exception as e:
+                logger.warning("Failed to fetch MCP tools: %s", str(e))
 
     # Initialize model based on configuration
     if cfg.base_url:
