@@ -19,7 +19,7 @@
 | 10 | SSE Messages-Tuple Protocol Compatibility | 🟡 In Progress | Critical | 2026-02-20 |
 | 11 | Package Upgrade & `create_agent` Migration | 🟢 Complete | High | 2026-02-11 |
 | 12 | Postgres Persistence (Supabase) | 🟡 In Progress | High | 2026-02-14 |
-| 13 | MCP Agent Integration | ⚪ Not Started | Medium | 2026-02-11 |
+| 13 | MCP Agent Integration | 🟡 In Progress | Medium | 2026-02-14 |
 | 14 | Agent Persistence (Supabase/Postgres) | ⚪ Not Started | Medium | 2026-02-11 |
 
 ---
@@ -72,6 +72,30 @@
 ---
 
 ## Recent Activity
+
+- 2026-02-14 (implementation session — Goal 13 Task-02):
+  - Goal 13 Task-02: **COMPLETE** — MCP Client: Adopt `langchain-mcp-adapters`
+    - Added `langchain-mcp-adapters>=0.2.1` dependency (`mcp` bumped 1.9.1 → 1.26.0)
+    - Replaced 55-line manual MCP connection block in `graph()` with ~15-line `MultiServerMCPClient` call
+    - Removed `create_langchain_mcp_tool()` and `wrap_mcp_authenticate_tool()` from `tools_agent/utils/tools.py`
+    - Created `tools_agent/utils/mcp_interceptors.py` — `handle_interaction_required` interceptor (code -32003 → clean `ToolException`)
+    - `MCPConfig` backward-compatible with OAP UI (unchanged schema)
+    - Relaxed `cfg.mcp_config.tools` requirement (load all tools if not specified, filter afterward)
+    - 440/440 tests passing, ruff clean
+  - **Next**: Goal 13 Task-03 — MCP Server: wire `execute_agent_run`, dynamic tool listing
+
+- 2026-02-14 (research session — Goal 13 Task-01):
+  - Goal 13 Task-01: **COMPLETE** — MCP Agent Integration Research
+    - Evaluated `langchain-mcp-adapters` v0.2.1 (PyPI) — official LangChain MCP package, 28 releases, actively maintained
+    - Compatible with our deps: `langchain-core>=1.0.0,<2.0.0` ✅, `mcp>=1.9.2` (needs patch bump from 1.9.1) ⚠️
+    - Features: `MultiServerMCPClient` (multi-server, named servers), tool interceptors, stateful sessions, auth (headers + httpx.Auth), resources, prompts, progress notifications, elicitation, structured/multimodal content
+    - **Decision: ADOPT `langchain-mcp-adapters`** — replaces ~200 lines of manual MCP client code with ~20 lines
+    - Assessed current MCP client: 6 confirmed problems (no connection reuse, single server, manual wrapping, no caching, silent errors, no health checks)
+    - Assessed current MCP server: 5 confirmed problems (agent execution not wired, no streaming, hardcoded single tool, manual JSON-RPC, outdated protocol version)
+    - Decision: Keep manual JSON-RPC server for now (lower risk), just wire `execute_agent_run`
+    - Refined task breakdown: Task-02 (adopt adapters), Task-03 (wire MCP server), Task-04 (testing)
+    - Updated Goal 13 scratchpad with comprehensive findings
+  - **Next**: Goal 13 Task-02 — MCP Client: adopt `langchain-mcp-adapters`, refactor `graph()`
 
 - 2026-02-14 (implementation session):
   - Goal 12 Task-03: **COMPLETE** — Robyn Storage → Postgres (All 3 Phases)

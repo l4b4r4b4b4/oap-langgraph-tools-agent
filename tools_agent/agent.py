@@ -8,13 +8,8 @@ from tools_agent.utils.tools import create_rag_tool
 from langchain.chat_models import init_chat_model
 from langchain_openai import ChatOpenAI
 from tools_agent.utils.token import fetch_tokens
-from mcp.client.streamable_http import streamablehttp_client
-from mcp import ClientSession
-from langchain_core.tools import StructuredTool
-from tools_agent.utils.tools import (
-    wrap_mcp_authenticate_tool,
-    create_langchain_mcp_tool,
-)
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from tools_agent.utils.mcp_interceptors import handle_interaction_required
 from robyn_server.database import get_checkpointer, get_store
 
 logger = logging.getLogger(__name__)
@@ -332,63 +327,42 @@ async def graph(config: RunnableConfig):
     if (
         cfg.mcp_config
         and cfg.mcp_config.url
-        and cfg.mcp_config.tools
         and (mcp_tokens or not cfg.mcp_config.auth_required)
     ):
         server_url = cfg.mcp_config.url.rstrip("/") + "/mcp"
+        headers = {}
+        if mcp_tokens:
+            headers["Authorization"] = f"Bearer {mcp_tokens['access_token']}"
 
-        tool_names_to_find = set(cfg.mcp_config.tools)
-        fetched_mcp_tools_list: list[StructuredTool] = []
-        names_of_tools_added = set()
-
-        # If the tokens are not None, then we need to add the authorization header. otherwise make headers None
-        headers = (
-            mcp_tokens is not None
-            and {"Authorization": f"Bearer {mcp_tokens['access_token']}"}
-            or None
-        )
         try:
-            async with streamablehttp_client(server_url, headers=headers) as streams:
-                read_stream, write_stream, _ = streams
-                async with ClientSession(read_stream, write_stream) as session:
-                    await session.initialize()
+            # Each MCP server is a FastMCP streaming service on the cluster.
+            # MultiServerMCPClient handles connection lifecycle, tool
+            # conversion, and protocol compliance automatically.
+            mcp_client = MultiServerMCPClient(
+                {
+                    "default": {
+                        "transport": "http",
+                        "url": server_url,
+                        "headers": headers,
+                    }
+                },
+                tool_interceptors=[handle_interaction_required],
+            )
+            mcp_tools = await mcp_client.get_tools()
 
-                    page_cursor = None
+            # Filter by tool names if specified (empty/None = load all tools)
+            if cfg.mcp_config.tools:
+                tool_names_requested = set(cfg.mcp_config.tools)
+                mcp_tools = [t for t in mcp_tools if t.name in tool_names_requested]
 
-                    while True:
-                        tool_list_page = await session.list_tools(cursor=page_cursor)
-
-                        if not tool_list_page or not tool_list_page.tools:
-                            break
-
-                        for mcp_tool in tool_list_page.tools:
-                            if not tool_names_to_find or (
-                                mcp_tool.name in tool_names_to_find
-                                and mcp_tool.name not in names_of_tools_added
-                            ):
-                                langchain_tool = create_langchain_mcp_tool(
-                                    mcp_tool, mcp_server_url=server_url, headers=headers
-                                )
-                                fetched_mcp_tools_list.append(
-                                    wrap_mcp_authenticate_tool(langchain_tool)
-                                )
-                                if tool_names_to_find:
-                                    names_of_tools_added.add(mcp_tool.name)
-
-                        page_cursor = tool_list_page.nextCursor
-
-                        if not page_cursor:
-                            break
-                        if tool_names_to_find and len(names_of_tools_added) == len(
-                            tool_names_to_find
-                        ):
-                            break
-
-                    tools.extend(fetched_mcp_tools_list)
+            tools.extend(mcp_tools)
+            logger.info(
+                "MCP tools loaded: count=%d server=%s",
+                len(mcp_tools),
+                _safe_mask_url(server_url),
+            )
         except Exception as e:
-            # Avoid printing (may not route to runtime logs) and avoid leaking headers/tokens.
             logger.warning("Failed to fetch MCP tools: %s", str(e))
-            pass
 
     # Initialize model based on configuration
     if cfg.base_url:
