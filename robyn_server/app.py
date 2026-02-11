@@ -4,11 +4,18 @@ This module provides the Robyn web server for the OAP LangGraph Tools Agent.
 It implements a LangGraph-compatible API for Open Agent Platform compatibility.
 """
 
+import logging
+
 from robyn import Robyn
 from robyn.openapi import OpenAPI, OpenAPIInfo
 
 from robyn_server.auth import auth_middleware
 from robyn_server.config import get_config
+from robyn_server.database import (
+    initialize_database,
+    is_postgres_enabled,
+    shutdown_database,
+)
 from robyn_server.models import HealthResponse, ServiceInfoResponse
 from robyn_server.openapi_spec import (
     API_DESCRIPTION,
@@ -28,6 +35,8 @@ from robyn_server.routes.mcp import register_mcp_routes
 from robyn_server.routes.metrics import register_metrics_routes
 from robyn_server.routes.store import register_store_routes
 
+logger = logging.getLogger(__name__)
+
 # Create custom OpenAPI configuration
 openapi_info = OpenAPIInfo(
     title=API_TITLE,
@@ -42,6 +51,28 @@ openapi.openapi_file_override = True
 
 # Create the Robyn application with custom OpenAPI
 app = Robyn(__file__, openapi=openapi)
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle hooks
+# ---------------------------------------------------------------------------
+
+
+@app.startup_handler
+async def on_startup() -> None:
+    """Initialise Postgres persistence (if DATABASE_URL is configured)."""
+    result = await initialize_database()
+    if result:
+        logger.info("Robyn startup: Postgres persistence enabled")
+    else:
+        logger.info("Robyn startup: running with in-memory storage")
+
+
+@app.shutdown_handler
+async def on_shutdown() -> None:
+    """Close the Postgres connection pool gracefully."""
+    await shutdown_database()
+    logger.info("Robyn shutdown: database resources released")
 
 
 # Register authentication middleware using decorator pattern
@@ -73,10 +104,12 @@ async def health() -> dict:
     """Health check endpoint (public - no auth required).
 
     Returns:
-        JSON response with status "ok" if the server is healthy.
+        JSON response with status "ok" and persistence information.
     """
     response = HealthResponse()
-    return response.model_dump()
+    data = response.model_dump()
+    data["persistence"] = "postgres" if is_postgres_enabled() else "in-memory"
+    return data
 
 
 @app.get("/ok")
@@ -155,6 +188,7 @@ async def info() -> dict:
             "a2a": True,  # Agent-to-Agent protocol implemented
             "mcp": True,  # MCP endpoints implemented
             "metrics": True,  # Prometheus metrics available
+            "persistence": is_postgres_enabled(),  # Postgres persistence
         },
         # Available agent graphs
         "graphs": ["agent"],
@@ -164,6 +198,8 @@ async def info() -> dict:
             "llm_configured": bool(
                 config.llm.openai_api_key or config.llm.openai_api_base
             ),
+            "postgres_configured": config.database.is_configured,
+            "postgres_connected": is_postgres_enabled(),
         },
         # Tier completion status
         "tiers": {

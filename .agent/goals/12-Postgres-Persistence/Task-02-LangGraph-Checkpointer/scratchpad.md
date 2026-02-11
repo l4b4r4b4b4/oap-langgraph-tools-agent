@@ -1,10 +1,12 @@
 # Task 02: LangGraph Checkpointer + Store Integration
 
-> **Status**: ⚪ Not Started
+> **Status**: 🟢 Complete
 > **Parent Goal**: [12-Postgres-Persistence](../scratchpad.md)
 > **Depends On**: [Task-01-Dependencies-DB-Module](../Task-01-Dependencies-DB-Module/scratchpad.md)
 > **Created**: 2026-02-11
-> **Updated**: 2026-02-11
+> **Updated**: 2026-02-12
+> **Completed**: 2026-02-12
+> **Note**: Core implementation was done as part of Task-01 — `agent.py` wiring + live E2E verification
 
 ## Objective
 
@@ -161,18 +163,18 @@ Currently these endpoints return mock/in-memory state from `ThreadStore`. With a
 
 ## Acceptance Criteria
 
-- [ ] `tools_agent/agent.py` passes `checkpointer` and `store` to `create_agent()`
-- [ ] When `DATABASE_URL` is set: conversation state persists across server restarts
-- [ ] When `DATABASE_URL` is NOT set: agent works identically to before (no persistence, no errors)
-- [ ] `thread_id` correctly flows from HTTP request → `RunnableConfig` → checkpointer
-- [ ] Multi-turn conversation memory works:
+- [x] `tools_agent/agent.py` passes `checkpointer` and `store` to `create_agent()`
+- [x] When `DATABASE_URL` is set: conversation state persists across server restarts
+- [x] When `DATABASE_URL` is NOT set: agent works identically to before (no persistence, no errors)
+- [x] `thread_id` correctly flows from HTTP request → `RunnableConfig` → checkpointer
+- [x] Multi-turn conversation memory works:
   - Message 1: "My name is Alice" → agent responds
   - Message 2 (same thread): "What's my name?" → agent knows "Alice"
-- [ ] Different threads are isolated (thread A doesn't see thread B's messages)
-- [ ] LangGraph checkpoint tables exist in Postgres after `.setup()` runs
-- [ ] No message duplication in streaming output
-- [ ] `ruff check` and `ruff format` pass
-- [ ] Existing tests pass
+- [x] Different threads are isolated (thread A doesn't see thread B's messages)
+- [x] LangGraph checkpoint tables exist in Postgres after `.setup()` runs
+- [x] No message duplication in streaming output
+- [x] `ruff check` and `ruff format` pass
+- [x] Existing tests pass (440 passed)
 
 ## Verification Script
 
@@ -212,8 +214,27 @@ async def test_persistence():
 asyncio.run(test_persistence())
 ```
 
-## Notes
+## Implementation Notes (Completed)
 
-- The `AsyncPostgresSaver` uses its own internal `psycopg_pool.AsyncConnectionPool`. Even though we create a shared pool in `database.py`, the checkpointer manages its own connections via `from_conn_string()`. This means slightly more connections to Postgres than strictly necessary, but it's the simplest and most maintainable approach. Sharing a pool requires using the lower-level `AsyncPostgresSaver(conn=...)` constructor which is more complex.
+### What Was Done (in Task-01 session)
+
+1. **`tools_agent/agent.py`** — Added imports for `get_checkpointer`, `get_store`, `is_postgres_enabled` from `robyn_server.database`. Passes `checkpointer=` and `store=` to `create_agent()`. Logs which persistence components are active.
+
+2. **Architecture decision: Shared pool, not `from_conn_string()`** — Both `AsyncPostgresSaver` and `AsyncPostgresStore` accept `Union[AsyncConnection, AsyncConnectionPool]` as their `conn` parameter. We pass the shared pool from `database.py` directly via `AsyncPostgresSaver(conn=pool)` / `AsyncPostgresStore(conn=pool)`, avoiding the `from_conn_string()` context manager lifecycle. Fewer connections, simpler lifecycle.
+
+3. **Import cycle risk: resolved** — `tools_agent.agent` → `robyn_server.database` → `robyn_server.config` has no cycle. Verified working in tests and live.
+
+4. **Per-request compilation: kept** — `graph()` is called per-request and creates a new `create_agent()` each time. The checkpointer/store are stateless gateways to Postgres, so this is safe. The same checkpointer handles per-thread isolation via `thread_id` in the `RunnableConfig`.
+
+### Live E2E Test Results
+
+- **Thread `c6883f368cb048ecb7f95d55d065f73d`**: "My name is Alice, I love chess" → "What is my name?" → **"You are Alice, and you love playing chess! 😊"** ✅
+- **Different thread**: "What is my name?" → **"I don't have information about your personal details."** ✅ (thread isolation)
+- 6 checkpoints saved to Postgres for the test thread (steps -1 through 4)
+- No message duplication in SSE stream
+- `astream_events` works correctly with checkpointer (loads prior state, appends new input)
+
+### Notes
+
 - The cross-thread `AsyncPostgresStore` enables future features like user-scoped memories, preferences, and knowledge that persists across all conversations. For the minimum viable integration, we wire it in but don't add store-writing logic to the agent nodes. That can be a future enhancement (e.g., a "remember this" tool).
-- The import cycle risk (`tools_agent` → `robyn_server`) is real. If it causes issues, the cleanest solution is to pass checkpointer/store as arguments to `graph()` or via the `RunnableConfig` configurable dict, rather than importing from `robyn_server.database` directly.
+- `thread_id` already flowed correctly from `_build_runnable_config()` in `streams.py` — no changes needed there.

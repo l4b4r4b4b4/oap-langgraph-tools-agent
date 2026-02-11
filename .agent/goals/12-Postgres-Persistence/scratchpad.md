@@ -1,9 +1,10 @@
 # Goal 12: Postgres Persistence
 
-> **Status**: ⚪ Not Started
+> **Status**: 🟡 In Progress
 > **Priority**: P1 (High)
 > **Created**: 2026-02-11
-> **Updated**: 2026-02-11
+> **Updated**: 2026-02-12
+> **Progress**: Tasks 01 + 02 complete (DB module + checkpointer/store wired + live E2E verified)
 
 ## Overview
 
@@ -103,26 +104,28 @@ async with (
 
 | Task ID | Description | Status | Depends On |
 |---------|-------------|--------|------------|
-| Task-01 | Dependencies & DB Module — `DATABASE_URL` config, connection pool, `database.py` module | ⚪ | Goal 11 (packages already added) |
-| Task-02 | LangGraph Checkpointer + Store — wire `AsyncPostgresSaver` + `AsyncPostgresStore` into agent, `.setup()` at startup | ⚪ | Task-01 |
+| Task-01 | Dependencies & DB Module — `DATABASE_URL` config, connection pool, `database.py` module, RLS hardening | 🟢 | Goal 11 (packages already added) |
+| Task-02 | LangGraph Checkpointer + Store — wire into `create_agent()`, live E2E persistence verified | 🟢 | Task-01 |
 | Task-03 | Robyn Storage → Postgres — `langgraph_server` schema DDL, Postgres-backed store implementations, same `Storage` interface | ⚪ | Task-01 |
 | Task-04 | Integration Testing — persistence across restarts, conversation memory, thread history, Robyn CRUD | ⚪ | Task-02, Task-03 |
 
 ## Architecture
 
-### Connection Flow
+### Connection Flow (Implemented)
 
 ```
-Robyn Server startup
-  ├── Load DATABASE_URL from env
-  ├── Create AsyncConnectionPool (psycopg_pool)
-  ├── AsyncPostgresSaver.from_conn_string(DATABASE_URL) → checkpointer
+Robyn Server startup (@app.startup_handler)
+  ├── Load DATABASE_URL from env (DatabaseConfig.from_env())
+  ├── Fast-fail probe: single AsyncConnection with 5s timeout
+  ├── Create shared AsyncConnectionPool (psycopg_pool)
+  │   └── kwargs: autocommit=True, prepare_threshold=0, row_factory=dict_row
+  ├── AsyncPostgresSaver(conn=pool) → checkpointer (shared pool, not from_conn_string)
   │   └── await checkpointer.setup()  (creates checkpoint tables)
-  ├── AsyncPostgresStore.from_conn_string(DATABASE_URL) → store
+  ├── AsyncPostgresStore(conn=pool) → store (shared pool, not from_conn_string)
   │   └── await store.setup()  (creates store tables)
-  ├── Create PostgresStorage(pool) → runtime storage
-  │   └── Run DDL migrations for langgraph_server schema
-  └── Wire checkpointer + store into agent compilation
+  ├── Enable RLS on all 6 LangGraph tables (idempotent ALTER TABLE)
+  ├── Wire checkpointer + store into create_agent() via get_checkpointer()/get_store()
+  └── (Future: Task-03) Create PostgresStorage(pool) → runtime storage
 ```
 
 ### Schema Layout
@@ -194,12 +197,16 @@ The `get_storage()` function returns either `InMemoryStorage` (no DATABASE_URL) 
 | 2026-02-11 | In-memory fallback when no DATABASE_URL | Backward compatible for dev/testing without Postgres |
 | 2026-02-11 | Same `Storage` interface | Routes must not change — swap implementation, not API |
 | 2026-02-11 | Checkpointer + Store are separate from runtime storage | LangGraph manages its own tables; we manage ours |
+| 2026-02-12 | Shared pool via direct constructor, not `from_conn_string()` | Both accept `AsyncConnectionPool` as `conn` param — fewer connections, simpler lifecycle, no context manager gymnastics |
+| 2026-02-12 | Fast-fail probe before pool creation | Single throwaway `AsyncConnection` with 5s timeout catches unreachable hosts in ~0.07s instead of 30s+ pool retry loop |
+| 2026-02-12 | RLS at startup, not Supabase migration | `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` (idempotent) runs after `setup()` — no permissive policies means PostgREST can't access; superuser bypasses RLS |
+| 2026-02-12 | Task-02 merged into Task-01 | Agent wiring + live E2E test naturally fit the same implementation session; no reason to split |
 
 ### Open Questions
 
-- [ ] Should the connection pool be shared between LangGraph checkpointer/store and our runtime storage? (pool reuse vs isolation)
-- [ ] What connection pool size is appropriate? (depends on expected concurrency)
-- [ ] Should we add health check for Postgres connectivity to the `/health` endpoint?
+- [x] Should the connection pool be shared between LangGraph checkpointer/store and our runtime storage? → **YES** — single `AsyncConnectionPool` shared by checkpointer, store, and future runtime storage. Both accept `Union[AsyncConnection, AsyncConnectionPool]` as `conn` param.
+- [x] What connection pool size is appropriate? → **min=2, max=10** (configurable via `DATABASE_POOL_MIN_SIZE`/`DATABASE_POOL_MAX_SIZE` env vars)
+- [x] Should we add health check for Postgres connectivity to the `/health` endpoint? → **YES** — `/health` returns `"persistence": "postgres"` or `"persistence": "in-memory"`
 - [ ] Do we need to handle Postgres connection drops gracefully mid-stream? (retry logic)
 - [ ] Should `chat_sessions.thread_id` in the existing `public` schema be linked to LangGraph thread IDs? (cross-system integration)
 

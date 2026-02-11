@@ -18,7 +18,7 @@
 | 08 | CI/CD DevOps Workflow & Feature Parity | 🟡 In Progress | Critical | 2026-02-05 |
 | 10 | SSE Messages-Tuple Protocol Compatibility | 🟡 In Progress | Critical | 2026-02-20 |
 | 11 | Package Upgrade & `create_agent` Migration | 🟢 Complete | High | 2026-02-11 |
-| 12 | Postgres Persistence (Supabase) | ⚪ Not Started | High | 2026-02-11 |
+| 12 | Postgres Persistence (Supabase) | 🟡 In Progress | High | 2026-02-12 |
 | 13 | MCP Agent Integration | ⚪ Not Started | Medium | 2026-02-11 |
 | 14 | Agent Persistence (Supabase/Postgres) | ⚪ Not Started | Medium | 2026-02-11 |
 
@@ -72,6 +72,20 @@
 ---
 
 ## Recent Activity
+
+- 2026-02-12 (implementation session):
+  - Goal 12: **IN PROGRESS** — Postgres Persistence
+    - Task-01 ✅: Created `robyn_server/database.py` — shared `AsyncConnectionPool`, fast-fail probe, checkpointer/store init
+    - Task-01 ✅: Added `DatabaseConfig` to `robyn_server/config.py` (DATABASE_URL + pool tuning env vars)
+    - Task-01 ✅: Wired `@app.startup_handler` / `@app.shutdown_handler` in `app.py`
+    - Task-01 ✅: Updated `/health` (persistence status) and `/info` (postgres capabilities)
+    - Task-01 ✅: Automatic RLS hardening on LangGraph tables at startup (blocks PostgREST, superuser bypasses)
+    - Task-02 ✅: Wired `checkpointer` + `store` into `create_agent()` in `tools_agent/agent.py`
+    - Task-02 ✅: Live E2E test with Ministral-3B: multi-turn memory ("Alice loves chess") + thread isolation
+    - Task-02 ✅: 6 checkpoints confirmed in Supabase Postgres, RLS verified, security advisors clean
+    - 440 tests passing, ruff clean
+    - **Remaining**: Task-03 (Robyn Storage → Postgres), Task-04 (Integration Testing)
+    - Branch: feat/goal-11-12-agent-migration-postgres-persistence
 
 - 2026-02-11 (implementation session, cont.):
   - Goal 13: **CREATED** — MCP Agent Integration

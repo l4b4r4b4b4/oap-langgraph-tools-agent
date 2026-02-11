@@ -196,8 +196,9 @@ services:
   ministral:
     ulimits:
       nofile:
-        soft: 65536
-        hard: 65536
+        soft: 8192
+        hard: 16384
+    pids_limit: 512
     device_cgroup_rules:
       - "c 195:* rmw"
       - "c 236:* rmw"
@@ -207,8 +208,8 @@ services:
       - HF_HOME=/.hf_cache
       - VLLM_ATTENTION_BACKEND=FLASHINFER
       - HF_HUB_ENABLE_HF_TRANSFER=1
-      - MAX_PARALLEL_LOADING_WORKERS=4
-    ipc: host
+      - MAX_PARALLEL_LOADING_WORKERS=2
+    shm_size: "2gb"
     deploy:
       replicas: 1
     volumes:
@@ -247,7 +248,7 @@ services:
         # "--enable-chunked-prefill",
       ]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://lm-gguf:80/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
       interval: 30s
       timeout: 5s
       retries: 5

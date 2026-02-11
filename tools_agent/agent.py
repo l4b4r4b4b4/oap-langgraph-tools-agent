@@ -15,6 +15,7 @@ from tools_agent.utils.tools import (
     wrap_mcp_authenticate_tool,
     create_langchain_mcp_tool,
 )
+from robyn_server.database import get_checkpointer, get_store
 
 logger = logging.getLogger(__name__)
 
@@ -435,8 +436,19 @@ async def graph(config: RunnableConfig):
             api_key=api_key or "No token found",
         )
 
+    # Get persistence components (None if DATABASE_URL not set)
+    checkpointer = get_checkpointer()
+    store = get_store()
+
+    if checkpointer is not None:
+        logger.info("graph() using Postgres checkpointer for thread persistence")
+    if store is not None:
+        logger.info("graph() using Postgres store for cross-thread memory")
+
     return create_agent(
         model=model,
         tools=tools,
         system_prompt=cfg.system_prompt + UNEDITABLE_SYSTEM_PROMPT,
+        checkpointer=checkpointer,
+        store=store,
     )
