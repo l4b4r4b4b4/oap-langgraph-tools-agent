@@ -3,6 +3,8 @@
 Tests the JSON-RPC 2.0 based MCP (Model Context Protocol) implementation.
 """
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 from robyn_server.mcp import (
@@ -22,6 +24,7 @@ from robyn_server.mcp import (
     create_success_response,
     mcp_handler,
 )
+from robyn_server.mcp.handlers import PROTOCOL_VERSION, McpMethodHandler
 
 
 # ============================================================================
@@ -111,14 +114,20 @@ class TestMcpSchemas:
     def test_mcp_initialize_result(self):
         """Test MCP initialize result."""
         result = McpInitializeResult(
-            protocol_version="2024-11-05",
+            protocol_version="2025-03-26",
             server_info=McpServerInfo(name="test", version="0.1.0"),
             capabilities=McpCapabilities(tools={}),
         )
         dumped = result.model_dump(by_alias=True)
-        assert dumped["protocolVersion"] == "2024-11-05"
+        assert dumped["protocolVersion"] == "2025-03-26"
         assert dumped["serverInfo"]["name"] == "test"
         assert "tools" in dumped["capabilities"]
+
+    def test_mcp_initialize_result_default_protocol_version(self):
+        """Test that the default protocol version is 2025-03-26."""
+        result = McpInitializeResult()
+        dumped = result.model_dump(by_alias=True)
+        assert dumped["protocolVersion"] == "2025-03-26"
 
     def test_mcp_tool(self):
         """Test MCP tool definition."""
@@ -199,7 +208,7 @@ class TestMcpHandler:
 
     @pytest.mark.asyncio
     async def test_handle_initialize(self):
-        """Test initialize method."""
+        """Test initialize method returns 2025-03-26 protocol version."""
         request = JsonRpcRequest(
             id="1",
             method="initialize",
@@ -210,7 +219,7 @@ class TestMcpHandler:
         )
         response = await mcp_handler.handle_request(request)
         assert response.error is None
-        assert "protocolVersion" in response.result
+        assert response.result["protocolVersion"] == "2025-03-26"
         assert "serverInfo" in response.result
         assert "capabilities" in response.result
 
@@ -308,6 +317,417 @@ class TestMcpHandler:
         response = await mcp_handler.handle_request(request)
         assert response.id is None
         assert response.error is None
+
+
+# ============================================================================
+# Protocol Version Tests
+# ============================================================================
+
+
+class TestProtocolVersion:
+    """Tests for MCP protocol version constant."""
+
+    def test_protocol_version_is_2025_03_26(self):
+        """Verify PROTOCOL_VERSION constant is set to 2025-03-26."""
+        assert PROTOCOL_VERSION == "2025-03-26"
+
+
+# ============================================================================
+# Dynamic Tool Listing Tests
+# ============================================================================
+
+
+class TestDynamicToolListing:
+    """Tests for dynamic tool listing in MCP handler."""
+
+    @pytest.mark.asyncio
+    async def test_tools_list_always_includes_langgraph_agent(self):
+        """Tool list always contains the langgraph_agent tool."""
+        handler = McpMethodHandler()
+        request = JsonRpcRequest(id="1", method="tools/list")
+        response = await handler.handle_request(request)
+        assert response.error is None
+        tool_names = [t["name"] for t in response.result["tools"]]
+        assert "langgraph_agent" in tool_names
+
+    @pytest.mark.asyncio
+    async def test_tools_list_has_required_input_schema(self):
+        """The langgraph_agent tool has 'message' as required input."""
+        handler = McpMethodHandler()
+        request = JsonRpcRequest(id="1", method="tools/list")
+        response = await handler.handle_request(request)
+        assert response.error is None
+        agent_tool = response.result["tools"][0]
+        assert agent_tool["name"] == "langgraph_agent"
+        assert "message" in agent_tool["inputSchema"]["properties"]
+        assert "message" in agent_tool["inputSchema"]["required"]
+
+    @pytest.mark.asyncio
+    async def test_tools_list_includes_optional_params(self):
+        """The langgraph_agent tool exposes thread_id and assistant_id."""
+        handler = McpMethodHandler()
+        request = JsonRpcRequest(id="1", method="tools/list")
+        response = await handler.handle_request(request)
+        agent_tool = response.result["tools"][0]
+        properties = agent_tool["inputSchema"]["properties"]
+        assert "thread_id" in properties
+        assert "assistant_id" in properties
+
+    @pytest.mark.asyncio
+    async def test_dynamic_description_with_mcp_tools(self):
+        """Description includes sub-tool names when agent has MCP tools."""
+        from robyn_server.mcp.handlers import _build_tool_description
+
+        tool_info = {
+            "mcp_tools": ["Math_Add", "Math_Multiply"],
+            "mcp_url": "http://math-service/mcp",
+            "rag_collections": [],
+            "rag_url": None,
+            "model_name": "openai:gpt-4o",
+        }
+        description = _build_tool_description(tool_info)
+        assert "Math_Add" in description
+        assert "Math_Multiply" in description
+        assert "gpt-4o" in description
+
+    @pytest.mark.asyncio
+    async def test_dynamic_description_with_rag_collections(self):
+        """Description mentions RAG collection count when configured."""
+        from robyn_server.mcp.handlers import _build_tool_description
+
+        tool_info = {
+            "mcp_tools": [],
+            "mcp_url": None,
+            "rag_collections": ["uuid-1", "uuid-2", "uuid-3"],
+            "rag_url": "http://rag/api",
+            "model_name": None,
+        }
+        description = _build_tool_description(tool_info)
+        assert "3 collection(s)" in description
+
+    @pytest.mark.asyncio
+    async def test_dynamic_description_empty_config(self):
+        """Description is base description when no tools are configured."""
+        from robyn_server.mcp.handlers import (
+            _BASE_TOOL_DESCRIPTION,
+            _build_tool_description,
+        )
+
+        tool_info = {
+            "mcp_tools": [],
+            "mcp_url": None,
+            "rag_collections": [],
+            "rag_url": None,
+            "model_name": None,
+        }
+        description = _build_tool_description(tool_info)
+        assert description == _BASE_TOOL_DESCRIPTION
+
+    @pytest.mark.asyncio
+    async def test_get_dynamic_agent_tool_fallback_on_error(self):
+        """Falls back to base description when introspection fails."""
+        from robyn_server.mcp.handlers import _BASE_TOOL_DESCRIPTION
+
+        handler = McpMethodHandler()
+        # Patch at the source module so the lazy import inside
+        # _get_dynamic_agent_tool picks up the mock.
+        with patch(
+            "robyn_server.agent.get_agent_tool_info",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("storage not available"),
+        ):
+            tool = await handler._get_dynamic_agent_tool()
+
+        assert tool.name == "langgraph_agent"
+        assert tool.description == _BASE_TOOL_DESCRIPTION
+
+
+# ============================================================================
+# Agent Execution Wiring Tests
+# ============================================================================
+
+
+class TestAgentExecutionWiring:
+    """Tests for _execute_agent wiring to robyn_server.agent."""
+
+    @pytest.mark.asyncio
+    async def test_execute_agent_calls_execute_agent_run(self):
+        """_execute_agent delegates to robyn_server.agent.execute_agent_run."""
+        handler = McpMethodHandler()
+        mock_result = "Hello from the agent!"
+
+        with patch(
+            "robyn_server.agent.execute_agent_run",
+            new_callable=AsyncMock,
+            return_value=mock_result,
+        ):
+            result = await handler._execute_agent(
+                message="test message",
+                thread_id="thread-123",
+                assistant_id="agent",
+            )
+
+        assert result == "Hello from the agent!"
+
+    @pytest.mark.asyncio
+    async def test_execute_agent_passes_arguments(self):
+        """_execute_agent passes all arguments to execute_agent_run."""
+        handler = McpMethodHandler()
+
+        with patch(
+            "robyn_server.agent.execute_agent_run",
+            new_callable=AsyncMock,
+            return_value="ok",
+        ) as mock_run:
+            await handler._execute_agent(
+                message="hello",
+                thread_id="tid-1",
+                assistant_id="custom-agent",
+            )
+
+        mock_run.assert_awaited_once_with(
+            message="hello",
+            thread_id="tid-1",
+            assistant_id="custom-agent",
+        )
+
+    @pytest.mark.asyncio
+    async def test_execute_agent_propagates_errors(self):
+        """_execute_agent lets exceptions propagate (no placeholder fallback)."""
+        handler = McpMethodHandler()
+
+        with patch(
+            "robyn_server.agent.execute_agent_run",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("LLM not configured"),
+        ):
+            with pytest.raises(RuntimeError, match="LLM not configured"):
+                await handler._execute_agent(message="test")
+
+    @pytest.mark.asyncio
+    async def test_tools_call_returns_agent_response(self):
+        """Full tools/call flow returns agent response as MCP content."""
+        handler = McpMethodHandler()
+
+        with patch(
+            "robyn_server.agent.execute_agent_run",
+            new_callable=AsyncMock,
+            return_value="The answer is 42.",
+        ):
+            request = JsonRpcRequest(
+                id="call-1",
+                method="tools/call",
+                params={
+                    "name": "langgraph_agent",
+                    "arguments": {"message": "What is the meaning of life?"},
+                },
+            )
+            response = await handler.handle_request(request)
+
+        assert response.error is None
+        assert response.result["isError"] is False
+        assert response.result["content"][0]["text"] == "The answer is 42."
+
+    @pytest.mark.asyncio
+    async def test_tools_call_returns_error_on_agent_failure(self):
+        """tools/call returns isError=true when agent execution fails."""
+        handler = McpMethodHandler()
+
+        with patch(
+            "robyn_server.agent.execute_agent_run",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("Model unavailable"),
+        ):
+            request = JsonRpcRequest(
+                id="call-2",
+                method="tools/call",
+                params={
+                    "name": "langgraph_agent",
+                    "arguments": {"message": "test"},
+                },
+            )
+            response = await handler.handle_request(request)
+
+        assert response.error is None  # JSON-RPC level is success
+        assert response.result["isError"] is True
+        assert "Model unavailable" in response.result["content"][0]["text"]
+
+    @pytest.mark.asyncio
+    async def test_tools_call_with_thread_id_and_assistant_id(self):
+        """tools/call passes thread_id and assistant_id to execute_agent_run."""
+        handler = McpMethodHandler()
+
+        with patch(
+            "robyn_server.agent.execute_agent_run",
+            new_callable=AsyncMock,
+            return_value="response",
+        ) as mock_run:
+            request = JsonRpcRequest(
+                id="call-3",
+                method="tools/call",
+                params={
+                    "name": "langgraph_agent",
+                    "arguments": {
+                        "message": "hello",
+                        "thread_id": "t-abc",
+                        "assistant_id": "my-assistant",
+                    },
+                },
+            )
+            await handler.handle_request(request)
+
+        mock_run.assert_awaited_once_with(
+            message="hello",
+            thread_id="t-abc",
+            assistant_id="my-assistant",
+        )
+
+
+# ============================================================================
+# Agent Module Tests
+# ============================================================================
+
+
+class TestAgentModule:
+    """Tests for robyn_server.agent module functions."""
+
+    @pytest.mark.asyncio
+    async def test_extract_response_text_ai_message(self):
+        """Extracts content from the last AIMessage in the result."""
+        from langchain_core.messages import AIMessage, HumanMessage
+
+        from robyn_server.agent import _extract_response_text
+
+        result = {
+            "messages": [
+                HumanMessage(content="What is 2+2?", id="h1"),
+                AIMessage(content="The answer is 4.", id="a1"),
+            ]
+        }
+        assert _extract_response_text(result) == "The answer is 4."
+
+    @pytest.mark.asyncio
+    async def test_extract_response_text_multiple_ai_messages(self):
+        """Returns the LAST AI message when multiple exist."""
+        from langchain_core.messages import AIMessage, HumanMessage
+
+        from robyn_server.agent import _extract_response_text
+
+        result = {
+            "messages": [
+                HumanMessage(content="Q1", id="h1"),
+                AIMessage(content="First answer", id="a1"),
+                HumanMessage(content="Q2", id="h2"),
+                AIMessage(content="Second answer", id="a2"),
+            ]
+        }
+        assert _extract_response_text(result) == "Second answer"
+
+    @pytest.mark.asyncio
+    async def test_extract_response_text_dict_message(self):
+        """Extracts content from dict-format AI messages."""
+        from robyn_server.agent import _extract_response_text
+
+        result = {
+            "messages": [
+                {"type": "human", "content": "hello"},
+                {"type": "ai", "content": "hi there"},
+            ]
+        }
+        assert _extract_response_text(result) == "hi there"
+
+    @pytest.mark.asyncio
+    async def test_extract_response_text_no_messages(self):
+        """Returns JSON fallback when no messages are present."""
+        from robyn_server.agent import _extract_response_text
+
+        result = {"messages": []}
+        text = _extract_response_text(result)
+        assert "messages" in text  # JSON serialized
+
+    @pytest.mark.asyncio
+    async def test_build_mcp_runnable_config(self):
+        """Builds a RunnableConfig with merged assistant + runtime fields."""
+        from robyn_server.agent import _build_mcp_runnable_config
+
+        assistant_config = {"configurable": {"model_name": "openai:gpt-4o"}}
+        config = _build_mcp_runnable_config(
+            thread_id="t-1",
+            assistant_id="agent",
+            assistant_config=assistant_config,
+            owner_id="mcp-client",
+        )
+        assert config["configurable"]["thread_id"] == "t-1"
+        assert config["configurable"]["assistant_id"] == "agent"
+        assert config["configurable"]["owner"] == "mcp-client"
+        assert config["configurable"]["model_name"] == "openai:gpt-4o"
+        assert "run_id" in config["configurable"]
+
+    @pytest.mark.asyncio
+    async def test_build_mcp_runnable_config_no_assistant(self):
+        """Builds config correctly when assistant_config is None."""
+        from robyn_server.agent import _build_mcp_runnable_config
+
+        config = _build_mcp_runnable_config(
+            thread_id="t-2",
+            assistant_id="agent",
+            assistant_config=None,
+            owner_id="test-user",
+        )
+        assert config["configurable"]["thread_id"] == "t-2"
+        assert config["configurable"]["owner"] == "test-user"
+        assert "assistant" not in config["configurable"]
+
+    @pytest.mark.asyncio
+    async def test_get_agent_tool_info_no_assistant(self):
+        """Returns empty defaults when no assistant is found in storage."""
+        from robyn_server.agent import get_agent_tool_info
+
+        mock_storage = MagicMock()
+        mock_storage.assistants.get = AsyncMock(return_value=None)
+        mock_storage.assistants.list = AsyncMock(return_value=[])
+
+        # Patch at the source module so the lazy import inside
+        # get_agent_tool_info picks up the mock.
+        with patch("robyn_server.storage.get_storage", return_value=mock_storage):
+            info = await get_agent_tool_info()
+
+        assert info["mcp_tools"] == []
+        assert info["rag_collections"] == []
+        assert info["model_name"] is None
+
+    @pytest.mark.asyncio
+    async def test_get_agent_tool_info_with_assistant(self):
+        """Extracts tool info from assistant config."""
+        from robyn_server.agent import get_agent_tool_info
+
+        mock_assistant = MagicMock()
+        mock_assistant.graph_id = "agent"
+        mock_assistant.config = {
+            "configurable": {
+                "model_name": "anthropic:claude-sonnet-4-0",
+                "mcp_config": {
+                    "url": "http://math-svc/api",
+                    "tools": ["Math_Add", "Math_Sub"],
+                },
+                "rag": {
+                    "rag_url": "http://rag/api",
+                    "collections": ["col-uuid-1"],
+                },
+            }
+        }
+
+        mock_storage = MagicMock()
+        mock_storage.assistants.get = AsyncMock(return_value=mock_assistant)
+
+        with patch("robyn_server.storage.get_storage", return_value=mock_storage):
+            info = await get_agent_tool_info()
+
+        assert info["model_name"] == "anthropic:claude-sonnet-4-0"
+        assert info["mcp_tools"] == ["Math_Add", "Math_Sub"]
+        assert info["mcp_url"] == "http://math-svc/api"
+        assert info["rag_collections"] == ["col-uuid-1"]
+        assert info["rag_url"] == "http://rag/api"
 
 
 # ============================================================================

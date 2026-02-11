@@ -106,7 +106,7 @@ class McpInitializeParams(BaseModel):
 class McpInitializeResult(BaseModel):
     """Result of the initialize method."""
 
-    protocol_version: str = Field(default="2024-11-05", alias="protocolVersion")
+    protocol_version: str = Field(default="2025-03-26", alias="protocolVersion")
     server_info: McpServerInfo = Field(
         default_factory=McpServerInfo, alias="serverInfo"
     )

@@ -64,10 +64,10 @@ class CronHandler:
         storage = get_storage()
 
         # Verify assistant exists
-        assistant = storage.assistants.get(create_data.assistant_id, owner_id)
+        assistant = await storage.assistants.get(create_data.assistant_id, owner_id)
         if assistant is None:
             # Try to find by graph_id
-            assistants = storage.assistants.list(owner_id)
+            assistants = await storage.assistants.list(owner_id)
             assistant = next(
                 (a for a in assistants if a.graph_id == create_data.assistant_id),
                 None,
@@ -77,7 +77,7 @@ class CronHandler:
 
         # Create a placeholder thread for the cron
         # (actual runs may use new threads based on on_run_completed setting)
-        thread = storage.threads.create({}, owner_id)
+        thread = await storage.threads.create({}, owner_id)
         thread_id = thread.thread_id
 
         # Build the payload
@@ -113,7 +113,7 @@ class CronHandler:
             "metadata": create_data.metadata or {},
         }
 
-        cron = storage.crons.create(cron_data, owner_id)
+        cron = await storage.crons.create(cron_data, owner_id)
 
         # Schedule the cron job
         self.scheduler.add_cron_job(cron, owner_id)
@@ -145,7 +145,7 @@ class CronHandler:
             filters["thread_id"] = search_params.thread_id
 
         # Get all crons for user with filters
-        crons = storage.crons.list(owner_id, **filters)
+        crons = await storage.crons.list(owner_id, **filters)
 
         # Sort
         sort_key = search_params.sort_by.value
@@ -203,7 +203,7 @@ class CronHandler:
             filters["thread_id"] = count_params.thread_id
 
         # Get count
-        count = storage.crons.count(owner_id, **filters)
+        count = await storage.crons.count(owner_id, **filters)
         return count
 
     async def delete_cron(
@@ -226,7 +226,7 @@ class CronHandler:
         storage = get_storage()
 
         # Verify cron exists and belongs to user
-        cron = storage.crons.get(cron_id, owner_id)
+        cron = await storage.crons.get(cron_id, owner_id)
         if cron is None:
             raise ValueError(f"Cron not found: {cron_id}")
 
@@ -234,7 +234,7 @@ class CronHandler:
         self.scheduler.remove_cron_job(cron_id)
 
         # Delete from storage
-        deleted = storage.crons.delete(cron_id, owner_id)
+        deleted = await storage.crons.delete(cron_id, owner_id)
         if not deleted:
             raise ValueError(f"Failed to delete cron: {cron_id}")
 
@@ -256,7 +256,7 @@ class CronHandler:
             Cron instance if found, None otherwise
         """
         storage = get_storage()
-        return storage.crons.get(cron_id, owner_id)
+        return await storage.crons.get(cron_id, owner_id)
 
     async def execute_cron_run(
         self,
@@ -274,7 +274,7 @@ class CronHandler:
         storage = get_storage()
 
         # Get the cron
-        cron = storage.crons.get(cron_id, owner_id)
+        cron = await storage.crons.get(cron_id, owner_id)
         if cron is None:
             logger.warning(f"Cron {cron_id} not found during execution")
             return
@@ -292,7 +292,7 @@ class CronHandler:
         # Determine which thread to use
         if on_run_completed == OnRunCompleted.KEEP:
             # Create a new thread for this execution
-            new_thread = storage.threads.create({}, owner_id)
+            new_thread = await storage.threads.create({}, owner_id)
             thread_id = new_thread.thread_id
         else:
             # Use the cron's designated thread (will be cleaned up after)
@@ -311,7 +311,7 @@ class CronHandler:
 
         try:
             # Create run (actual execution happens asynchronously)
-            run = storage.runs.create(
+            run = await storage.runs.create(
                 thread_id=thread_id,
                 data=run_data,
                 owner_id=owner_id,
@@ -323,7 +323,7 @@ class CronHandler:
 
             # Update next_run_date
             next_run = calculate_next_run_date(cron.schedule)
-            storage.crons.update(
+            await storage.crons.update(
                 cron_id=cron_id,
                 owner_id=owner_id,
                 updates={"next_run_date": next_run},

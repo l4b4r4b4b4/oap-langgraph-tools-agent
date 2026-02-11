@@ -104,7 +104,7 @@ def format_updates_event(node_name: str, updates: dict[str, Any]) -> str:
     Used for graph node updates.
 
     Args:
-        node_name: The node that produced the update (e.g., "agent")
+        node_name: The node that produced the update (e.g., "model")
         updates: The update data
 
     Returns:
@@ -130,7 +130,7 @@ def format_messages_tuple_event(
     Args:
         message_delta: Message dict whose ``content`` field holds only the
             new token(s) produced since the last event.
-        metadata: Flat metadata dict (e.g. ``{"langgraph_node": "agent", …}``).
+        metadata: Flat metadata dict (e.g. ``{"langgraph_node": "model", …}``).
             Included inline with every event so the SDK does not need a
             separate metadata event.
 

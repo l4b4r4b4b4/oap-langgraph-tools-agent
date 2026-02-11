@@ -176,9 +176,9 @@ class TestThreadModels:
 class TestThreadStorage:
     """Tests for ThreadStore CRUD operations."""
 
-    def test_create_thread(self, storage, mock_user):
+    async def test_create_thread(self, storage, mock_user):
         """Should create a thread with generated ID and timestamps."""
-        thread = storage.threads.create({}, mock_user.identity)
+        thread = await storage.threads.create({}, mock_user.identity)
 
         assert thread.thread_id is not None
         assert len(thread.thread_id) == 32  # UUID hex
@@ -190,9 +190,9 @@ class TestThreadStorage:
         assert thread.created_at is not None
         assert thread.updated_at is not None
 
-    def test_create_thread_with_metadata(self, storage, mock_user):
+    async def test_create_thread_with_metadata(self, storage, mock_user):
         """Should create a thread with custom metadata."""
-        thread = storage.threads.create(
+        thread = await storage.threads.create(
             {"metadata": {"project": "test", "env": "dev"}},
             mock_user.identity,
         )
@@ -201,31 +201,31 @@ class TestThreadStorage:
         assert thread.metadata["env"] == "dev"
         assert thread.metadata["owner"] == mock_user.identity
 
-    def test_get_thread(self, storage, mock_user):
+    async def test_get_thread(self, storage, mock_user):
         """Should retrieve a thread by ID."""
-        created = storage.threads.create({}, mock_user.identity)
-        retrieved = storage.threads.get(created.thread_id, mock_user.identity)
+        created = await storage.threads.create({}, mock_user.identity)
+        retrieved = await storage.threads.get(created.thread_id, mock_user.identity)
 
         assert retrieved is not None
         assert retrieved.thread_id == created.thread_id
 
-    def test_get_thread_owner_isolation(self, storage, mock_user, other_user):
+    async def test_get_thread_owner_isolation(self, storage, mock_user, other_user):
         """Should not retrieve threads owned by other users."""
-        created = storage.threads.create({}, mock_user.identity)
+        created = await storage.threads.create({}, mock_user.identity)
 
         # Same user can retrieve
-        retrieved = storage.threads.get(created.thread_id, mock_user.identity)
+        retrieved = await storage.threads.get(created.thread_id, mock_user.identity)
         assert retrieved is not None
 
         # Different user cannot retrieve
-        retrieved = storage.threads.get(created.thread_id, other_user.identity)
+        retrieved = await storage.threads.get(created.thread_id, other_user.identity)
         assert retrieved is None
 
-    def test_update_thread(self, storage, mock_user):
+    async def test_update_thread(self, storage, mock_user):
         """Should update thread metadata."""
-        created = storage.threads.create({}, mock_user.identity)
+        created = await storage.threads.create({}, mock_user.identity)
 
-        updated = storage.threads.update(
+        updated = await storage.threads.update(
             created.thread_id,
             {"metadata": {"updated": True}},
             mock_user.identity,
@@ -235,11 +235,11 @@ class TestThreadStorage:
         assert updated.metadata["updated"] is True
         assert updated.metadata["owner"] == mock_user.identity
 
-    def test_update_thread_owner_isolation(self, storage, mock_user, other_user):
+    async def test_update_thread_owner_isolation(self, storage, mock_user, other_user):
         """Should not update threads owned by other users."""
-        created = storage.threads.create({}, mock_user.identity)
+        created = await storage.threads.create({}, mock_user.identity)
 
-        updated = storage.threads.update(
+        updated = await storage.threads.update(
             created.thread_id,
             {"metadata": {"hacked": True}},
             other_user.identity,
@@ -247,42 +247,42 @@ class TestThreadStorage:
 
         assert updated is None
 
-    def test_delete_thread(self, storage, mock_user):
+    async def test_delete_thread(self, storage, mock_user):
         """Should delete a thread."""
-        created = storage.threads.create({}, mock_user.identity)
+        created = await storage.threads.create({}, mock_user.identity)
 
-        deleted = storage.threads.delete(created.thread_id, mock_user.identity)
+        deleted = await storage.threads.delete(created.thread_id, mock_user.identity)
         assert deleted is True
 
         # Verify it's gone
-        retrieved = storage.threads.get(created.thread_id, mock_user.identity)
+        retrieved = await storage.threads.get(created.thread_id, mock_user.identity)
         assert retrieved is None
 
-    def test_delete_thread_owner_isolation(self, storage, mock_user, other_user):
+    async def test_delete_thread_owner_isolation(self, storage, mock_user, other_user):
         """Should not delete threads owned by other users."""
-        created = storage.threads.create({}, mock_user.identity)
+        created = await storage.threads.create({}, mock_user.identity)
 
-        deleted = storage.threads.delete(created.thread_id, other_user.identity)
+        deleted = await storage.threads.delete(created.thread_id, other_user.identity)
         assert deleted is False
 
         # Verify it still exists
-        retrieved = storage.threads.get(created.thread_id, mock_user.identity)
+        retrieved = await storage.threads.get(created.thread_id, mock_user.identity)
         assert retrieved is not None
 
-    def test_list_threads_owner_isolation(self, storage, mock_user, other_user):
+    async def test_list_threads_owner_isolation(self, storage, mock_user, other_user):
         """Should only list threads owned by the user."""
-        storage.threads.create(
+        await storage.threads.create(
             {"metadata": {"name": "user1-thread"}}, mock_user.identity
         )
-        storage.threads.create(
+        await storage.threads.create(
             {"metadata": {"name": "user2-thread"}}, other_user.identity
         )
 
-        user1_threads = storage.threads.list(mock_user.identity)
+        user1_threads = await storage.threads.list(mock_user.identity)
         assert len(user1_threads) == 1
         assert user1_threads[0].metadata["name"] == "user1-thread"
 
-        user2_threads = storage.threads.list(other_user.identity)
+        user2_threads = await storage.threads.list(other_user.identity)
         assert len(user2_threads) == 1
         assert user2_threads[0].metadata["name"] == "user2-thread"
 
@@ -295,10 +295,10 @@ class TestThreadStorage:
 class TestThreadState:
     """Tests for thread state management."""
 
-    def test_get_state_empty_thread(self, storage, mock_user):
+    async def test_get_state_empty_thread(self, storage, mock_user):
         """Should return state for thread with no values."""
-        thread = storage.threads.create({}, mock_user.identity)
-        state = storage.threads.get_state(thread.thread_id, mock_user.identity)
+        thread = await storage.threads.create({}, mock_user.identity)
+        state = await storage.threads.get_state(thread.thread_id, mock_user.identity)
 
         assert state is not None
         assert state.values == {}
@@ -308,23 +308,23 @@ class TestThreadState:
         assert state.checkpoint["thread_id"] == thread.thread_id
         assert state.created_at is not None
 
-    def test_get_state_owner_isolation(self, storage, mock_user, other_user):
+    async def test_get_state_owner_isolation(self, storage, mock_user, other_user):
         """Should not return state for threads owned by other users."""
-        thread = storage.threads.create({}, mock_user.identity)
+        thread = await storage.threads.create({}, mock_user.identity)
 
-        state = storage.threads.get_state(thread.thread_id, other_user.identity)
+        state = await storage.threads.get_state(thread.thread_id, other_user.identity)
         assert state is None
 
-    def test_get_state_nonexistent_thread(self, storage, mock_user):
+    async def test_get_state_nonexistent_thread(self, storage, mock_user):
         """Should return None for nonexistent thread."""
-        state = storage.threads.get_state("nonexistent", mock_user.identity)
+        state = await storage.threads.get_state("nonexistent", mock_user.identity)
         assert state is None
 
-    def test_add_state_snapshot(self, storage, mock_user):
+    async def test_add_state_snapshot(self, storage, mock_user):
         """Should add state snapshot to history."""
-        thread = storage.threads.create({}, mock_user.identity)
+        thread = await storage.threads.create({}, mock_user.identity)
 
-        result = storage.threads.add_state_snapshot(
+        result = await storage.threads.add_state_snapshot(
             thread.thread_id,
             {"values": {"messages": [{"role": "user", "content": "Hello"}]}},
             mock_user.identity,
@@ -333,14 +333,16 @@ class TestThreadState:
         assert result is True
 
         # Verify thread values updated
-        updated = storage.threads.get(thread.thread_id, mock_user.identity)
+        updated = await storage.threads.get(thread.thread_id, mock_user.identity)
         assert updated.values == {"messages": [{"role": "user", "content": "Hello"}]}
 
-    def test_add_state_snapshot_owner_isolation(self, storage, mock_user, other_user):
+    async def test_add_state_snapshot_owner_isolation(
+        self, storage, mock_user, other_user
+    ):
         """Should not add state to threads owned by other users."""
-        thread = storage.threads.create({}, mock_user.identity)
+        thread = await storage.threads.create({}, mock_user.identity)
 
-        result = storage.threads.add_state_snapshot(
+        result = await storage.threads.add_state_snapshot(
             thread.thread_id,
             {"values": {"hacked": True}},
             other_user.identity,
@@ -357,36 +359,40 @@ class TestThreadState:
 class TestThreadHistory:
     """Tests for thread history management."""
 
-    def test_get_history_empty(self, storage, mock_user):
+    async def test_get_history_empty(self, storage, mock_user):
         """Should return empty history for new thread."""
-        thread = storage.threads.create({}, mock_user.identity)
-        history = storage.threads.get_history(thread.thread_id, mock_user.identity)
+        thread = await storage.threads.create({}, mock_user.identity)
+        history = await storage.threads.get_history(
+            thread.thread_id, mock_user.identity
+        )
 
         assert history is not None
         assert len(history) == 0
 
-    def test_get_history_with_snapshots(self, storage, mock_user):
+    async def test_get_history_with_snapshots(self, storage, mock_user):
         """Should return history with snapshots."""
-        thread = storage.threads.create({}, mock_user.identity)
+        thread = await storage.threads.create({}, mock_user.identity)
 
         # Add some snapshots
-        storage.threads.add_state_snapshot(
+        await storage.threads.add_state_snapshot(
             thread.thread_id,
             {"values": {"step": 1}},
             mock_user.identity,
         )
-        storage.threads.add_state_snapshot(
+        await storage.threads.add_state_snapshot(
             thread.thread_id,
             {"values": {"step": 2}},
             mock_user.identity,
         )
-        storage.threads.add_state_snapshot(
+        await storage.threads.add_state_snapshot(
             thread.thread_id,
             {"values": {"step": 3}},
             mock_user.identity,
         )
 
-        history = storage.threads.get_history(thread.thread_id, mock_user.identity)
+        history = await storage.threads.get_history(
+            thread.thread_id, mock_user.identity
+        )
 
         assert len(history) == 3
         # Most recent first
@@ -394,18 +400,18 @@ class TestThreadHistory:
         assert history[1].values == {"step": 2}
         assert history[2].values == {"step": 1}
 
-    def test_get_history_with_limit(self, storage, mock_user):
+    async def test_get_history_with_limit(self, storage, mock_user):
         """Should respect limit parameter."""
-        thread = storage.threads.create({}, mock_user.identity)
+        thread = await storage.threads.create({}, mock_user.identity)
 
         for i in range(5):
-            storage.threads.add_state_snapshot(
+            await storage.threads.add_state_snapshot(
                 thread.thread_id,
                 {"values": {"step": i}},
                 mock_user.identity,
             )
 
-        history = storage.threads.get_history(
+        history = await storage.threads.get_history(
             thread.thread_id, mock_user.identity, limit=2
         )
 
@@ -414,21 +420,23 @@ class TestThreadHistory:
         assert history[0].values == {"step": 4}
         assert history[1].values == {"step": 3}
 
-    def test_get_history_owner_isolation(self, storage, mock_user, other_user):
+    async def test_get_history_owner_isolation(self, storage, mock_user, other_user):
         """Should not return history for threads owned by other users."""
-        thread = storage.threads.create({}, mock_user.identity)
-        storage.threads.add_state_snapshot(
+        thread = await storage.threads.create({}, mock_user.identity)
+        await storage.threads.add_state_snapshot(
             thread.thread_id,
             {"values": {"secret": "data"}},
             mock_user.identity,
         )
 
-        history = storage.threads.get_history(thread.thread_id, other_user.identity)
+        history = await storage.threads.get_history(
+            thread.thread_id, other_user.identity
+        )
         assert history is None
 
-    def test_get_history_nonexistent_thread(self, storage, mock_user):
+    async def test_get_history_nonexistent_thread(self, storage, mock_user):
         """Should return None for nonexistent thread."""
-        history = storage.threads.get_history("nonexistent", mock_user.identity)
+        history = await storage.threads.get_history("nonexistent", mock_user.identity)
         assert history is None
 
 
@@ -440,42 +448,39 @@ class TestThreadHistory:
 class TestThreadSearch:
     """Tests for thread search and filtering."""
 
-    def test_filter_by_status(self, storage, mock_user):
+    async def test_filter_by_status(self, storage, mock_user):
         """Should filter threads by status."""
-        storage.threads.create({}, mock_user.identity)
-        storage.threads.create({}, mock_user.identity)
+        await storage.threads.create({}, mock_user.identity)
+        await storage.threads.create({}, mock_user.identity)
 
         # Update one to busy
-        threads = storage.threads.list(mock_user.identity)
-        storage.threads.update(
+        threads = await storage.threads.list(mock_user.identity)
+        await storage.threads.update(
             threads[0].thread_id, {"status": "busy"}, mock_user.identity
         )
 
         # Filter by idle
-        idle_threads = [
-            t for t in storage.threads.list(mock_user.identity) if t.status == "idle"
-        ]
+        all_threads = await storage.threads.list(mock_user.identity)
+        idle_threads = [t for t in all_threads if t.status == "idle"]
         assert len(idle_threads) == 1
 
         # Filter by busy
-        busy_threads = [
-            t for t in storage.threads.list(mock_user.identity) if t.status == "busy"
-        ]
+        busy_threads = [t for t in all_threads if t.status == "busy"]
         assert len(busy_threads) == 1
 
-    def test_filter_by_metadata(self, storage, mock_user):
+    async def test_filter_by_metadata(self, storage, mock_user):
         """Should filter threads by metadata."""
-        storage.threads.create(
+        await storage.threads.create(
             {"metadata": {"project": "alpha", "env": "dev"}}, mock_user.identity
         )
-        storage.threads.create(
+        await storage.threads.create(
             {"metadata": {"project": "beta", "env": "dev"}}, mock_user.identity
         )
-        storage.threads.create(
+        await storage.threads.create(
             {"metadata": {"project": "alpha", "env": "prod"}}, mock_user.identity
         )
 
-        all_threads = storage.threads.list(mock_user.identity)
+        all_threads = await storage.threads.list(mock_user.identity)
         assert len(all_threads) == 3
 
         # Filter by project
@@ -490,13 +495,13 @@ class TestThreadSearch:
         ]
         assert len(alpha_dev) == 1
 
-    def test_pagination(self, storage, mock_user):
+    async def test_pagination(self, storage, mock_user):
         """Should paginate results correctly."""
         # Create 5 threads
         for i in range(5):
-            storage.threads.create({"metadata": {"index": i}}, mock_user.identity)
+            await storage.threads.create({"metadata": {"index": i}}, mock_user.identity)
 
-        all_threads = storage.threads.list(mock_user.identity)
+        all_threads = await storage.threads.list(mock_user.identity)
         assert len(all_threads) == 5
 
         # Paginate manually
@@ -517,51 +522,51 @@ class TestThreadSearch:
 class TestEdgeCases:
     """Tests for edge cases and error handling."""
 
-    def test_get_nonexistent_thread(self, storage, mock_user):
+    async def test_get_nonexistent_thread(self, storage, mock_user):
         """Should return None for nonexistent thread."""
-        thread = storage.threads.get("nonexistent-id", mock_user.identity)
+        thread = await storage.threads.get("nonexistent-id", mock_user.identity)
         assert thread is None
 
-    def test_update_nonexistent_thread(self, storage, mock_user):
+    async def test_update_nonexistent_thread(self, storage, mock_user):
         """Should return None when updating nonexistent thread."""
-        thread = storage.threads.update(
+        thread = await storage.threads.update(
             "nonexistent-id",
             {"metadata": {"key": "value"}},
             mock_user.identity,
         )
         assert thread is None
 
-    def test_delete_nonexistent_thread(self, storage, mock_user):
+    async def test_delete_nonexistent_thread(self, storage, mock_user):
         """Should return False when deleting nonexistent thread."""
-        deleted = storage.threads.delete("nonexistent-id", mock_user.identity)
+        deleted = await storage.threads.delete("nonexistent-id", mock_user.identity)
         assert deleted is False
 
-    def test_thread_id_is_generated(self, storage, mock_user):
+    async def test_thread_id_is_generated(self, storage, mock_user):
         """Should generate unique thread IDs."""
-        thread1 = storage.threads.create({}, mock_user.identity)
-        thread2 = storage.threads.create({}, mock_user.identity)
+        thread1 = await storage.threads.create({}, mock_user.identity)
+        thread2 = await storage.threads.create({}, mock_user.identity)
 
         assert thread1.thread_id is not None
         assert thread2.thread_id is not None
         assert thread1.thread_id != thread2.thread_id
 
-    def test_timestamps_are_set(self, storage, mock_user):
+    async def test_timestamps_are_set(self, storage, mock_user):
         """Should set created_at and updated_at timestamps."""
-        thread = storage.threads.create({}, mock_user.identity)
+        thread = await storage.threads.create({}, mock_user.identity)
 
         assert thread.created_at is not None
         assert thread.updated_at is not None
         assert thread.created_at == thread.updated_at
 
-    def test_update_changes_updated_at(self, storage, mock_user):
+    async def test_update_changes_updated_at(self, storage, mock_user):
         """Should update updated_at on modification."""
-        thread = storage.threads.create({}, mock_user.identity)
+        thread = await storage.threads.create({}, mock_user.identity)
         original_updated = thread.updated_at
 
         # Small delay to ensure timestamp difference
         time.sleep(0.01)
 
-        updated = storage.threads.update(
+        updated = await storage.threads.update(
             thread.thread_id,
             {"metadata": {"modified": True}},
             mock_user.identity,
@@ -571,26 +576,30 @@ class TestEdgeCases:
         assert updated.updated_at > original_updated
         assert updated.created_at == thread.created_at
 
-    def test_delete_cleans_up_history(self, storage, mock_user):
+    async def test_delete_cleans_up_history(self, storage, mock_user):
         """Should clean up history when thread is deleted."""
-        thread = storage.threads.create({}, mock_user.identity)
+        thread = await storage.threads.create({}, mock_user.identity)
 
         # Add some history
-        storage.threads.add_state_snapshot(
+        await storage.threads.add_state_snapshot(
             thread.thread_id,
             {"values": {"data": "test"}},
             mock_user.identity,
         )
 
         # Verify history exists
-        history = storage.threads.get_history(thread.thread_id, mock_user.identity)
+        history = await storage.threads.get_history(
+            thread.thread_id, mock_user.identity
+        )
         assert len(history) == 1
 
         # Delete thread
-        storage.threads.delete(thread.thread_id, mock_user.identity)
+        await storage.threads.delete(thread.thread_id, mock_user.identity)
 
         # History should be gone (thread not found)
-        history = storage.threads.get_history(thread.thread_id, mock_user.identity)
+        history = await storage.threads.get_history(
+            thread.thread_id, mock_user.identity
+        )
         assert history is None
 
 
@@ -602,9 +611,9 @@ class TestEdgeCases:
 class TestThreadSerialization:
     """Tests for Thread model serialization."""
 
-    def test_thread_datetime_serialization(self, storage, mock_user):
+    async def test_thread_datetime_serialization(self, storage, mock_user):
         """Thread datetimes should serialize to ISO 8601 with Z suffix."""
-        thread = storage.threads.create({}, mock_user.identity)
+        thread = await storage.threads.create({}, mock_user.identity)
 
         # Serialize to JSON
         json_data = thread.model_dump(mode="json")
@@ -614,10 +623,10 @@ class TestThreadSerialization:
         assert json_data["created_at"].endswith("Z")
         assert json_data["updated_at"].endswith("Z")
 
-    def test_thread_state_serialization(self, storage, mock_user):
+    async def test_thread_state_serialization(self, storage, mock_user):
         """ThreadState should serialize properly."""
-        thread = storage.threads.create({}, mock_user.identity)
-        state = storage.threads.get_state(thread.thread_id, mock_user.identity)
+        thread = await storage.threads.create({}, mock_user.identity)
+        state = await storage.threads.get_state(thread.thread_id, mock_user.identity)
 
         # Serialize to JSON
         json_data = state.model_dump(mode="json")
@@ -629,9 +638,9 @@ class TestThreadSerialization:
         assert "metadata" in json_data
         assert "created_at" in json_data
 
-    def test_json_response_with_thread(self, storage, mock_user):
+    async def test_json_response_with_thread(self, storage, mock_user):
         """json_response should serialize Thread model correctly."""
-        thread = storage.threads.create(
+        thread = await storage.threads.create(
             {"metadata": {"test": "value"}}, mock_user.identity
         )
 
@@ -643,12 +652,12 @@ class TestThreadSerialization:
         assert body["status"] == "idle"
         assert body["created_at"].endswith("Z")
 
-    def test_json_response_with_thread_list(self, storage, mock_user):
+    async def test_json_response_with_thread_list(self, storage, mock_user):
         """json_response should serialize list of Thread models."""
-        storage.threads.create({"metadata": {"name": "t1"}}, mock_user.identity)
-        storage.threads.create({"metadata": {"name": "t2"}}, mock_user.identity)
+        await storage.threads.create({"metadata": {"name": "t1"}}, mock_user.identity)
+        await storage.threads.create({"metadata": {"name": "t2"}}, mock_user.identity)
 
-        threads = storage.threads.list(mock_user.identity)
+        threads = await storage.threads.list(mock_user.identity)
         response = json_response(threads)
         body = json.loads(response.description)
 
@@ -656,18 +665,20 @@ class TestThreadSerialization:
         assert body[0]["status"] == "idle"
         assert body[1]["status"] == "idle"
 
-    def test_json_response_with_thread_state_list(self, storage, mock_user):
+    async def test_json_response_with_thread_state_list(self, storage, mock_user):
         """json_response should serialize list of ThreadState models."""
-        thread = storage.threads.create({}, mock_user.identity)
+        thread = await storage.threads.create({}, mock_user.identity)
 
-        storage.threads.add_state_snapshot(
+        await storage.threads.add_state_snapshot(
             thread.thread_id, {"values": {"step": 1}}, mock_user.identity
         )
-        storage.threads.add_state_snapshot(
+        await storage.threads.add_state_snapshot(
             thread.thread_id, {"values": {"step": 2}}, mock_user.identity
         )
 
-        history = storage.threads.get_history(thread.thread_id, mock_user.identity)
+        history = await storage.threads.get_history(
+            thread.thread_id, mock_user.identity
+        )
         response = json_response(history)
         body = json.loads(response.description)
 

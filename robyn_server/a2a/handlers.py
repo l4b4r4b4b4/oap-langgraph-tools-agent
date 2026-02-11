@@ -153,19 +153,19 @@ class A2AMethodHandler:
         # Get or create thread (contextId)
         thread_id = message.context_id
         if thread_id:
-            thread = storage.threads.get(thread_id, owner_id)
+            thread = await storage.threads.get(thread_id, owner_id)
             if thread is None:
                 raise ValueError(f"Context not found: {thread_id}")
         else:
             # Create new thread
-            thread = storage.threads.create({}, owner_id)
+            thread = await storage.threads.create({}, owner_id)
             thread_id = thread.thread_id
 
         # Verify assistant exists
-        assistant = storage.assistants.get(assistant_id, owner_id)
+        assistant = await storage.assistants.get(assistant_id, owner_id)
         if assistant is None:
             # Try by graph_id
-            assistants = storage.assistants.list(owner_id)
+            assistants = await storage.assistants.list(owner_id)
             assistant = next(
                 (a for a in assistants if a.graph_id == assistant_id),
                 None,
@@ -211,8 +211,8 @@ class A2AMethodHandler:
             "multitask_strategy": "reject",
         }
 
-        run = storage.runs.create(run_data, owner_id)
-        storage.threads.update(thread_id, {"status": "busy"}, owner_id)
+        run = await storage.runs.create(run_data, owner_id)
+        await storage.threads.update(thread_id, {"status": "busy"}, owner_id)
 
         # Execute the agent (simplified - in real impl would call agent graph)
         response_text = await self._execute_agent(
@@ -223,15 +223,15 @@ class A2AMethodHandler:
 
         # Store result in thread state
         if run_input:
-            storage.threads.add_state_snapshot(
+            await storage.threads.add_state_snapshot(
                 thread_id,
                 {"values": run_input},
                 owner_id,
             )
 
         # Mark run as success
-        storage.runs.update_status(run.run_id, "success", owner_id)
-        storage.threads.update(thread_id, {"status": "idle"}, owner_id)
+        await storage.runs.update_status(run.run_id, "success", owner_id)
+        await storage.threads.update(thread_id, {"status": "idle"}, owner_id)
 
         # Build A2A Task response
         task_id = create_task_id(thread_id, run.run_id)
@@ -292,7 +292,7 @@ class A2AMethodHandler:
         storage = get_storage()
 
         # Get the run
-        run = storage.runs.get_by_thread(thread_id, run_id, owner_id)
+        run = await storage.runs.get_by_thread(thread_id, run_id, owner_id)
         if run is None:
             return create_error_response(
                 None,
@@ -305,7 +305,7 @@ class A2AMethodHandler:
 
         # Get thread state for artifacts
         artifacts: list[Artifact] = []
-        thread_state = storage.threads.get_state(thread_id, owner_id)
+        thread_state = await storage.threads.get_state(thread_id, owner_id)
         if thread_state and thread_state.values:
             # Extract last AI message as artifact
             messages = thread_state.values.get("messages", [])
@@ -326,7 +326,7 @@ class A2AMethodHandler:
         history: list[A2AMessage] = []
         if get_params.history_length > 0:
             # Get thread state history
-            state_history = storage.threads.get_state_history(
+            state_history = await storage.threads.get_state_history(
                 thread_id,
                 owner_id,
                 limit=get_params.history_length,
@@ -505,7 +505,7 @@ class A2AMethodHandler:
         # Get or create thread
         thread_id = message.context_id
         if thread_id:
-            thread = storage.threads.get(thread_id, owner_id)
+            thread = await storage.threads.get(thread_id, owner_id)
             if thread is None:
                 error_response = create_error_response(
                     request_id,
@@ -515,13 +515,13 @@ class A2AMethodHandler:
                 yield f"data: {json.dumps(error_response.model_dump())}\n\n"
                 return
         else:
-            thread = storage.threads.create({}, owner_id)
+            thread = await storage.threads.create({}, owner_id)
             thread_id = thread.thread_id
 
         # Verify assistant
-        assistant = storage.assistants.get(assistant_id, owner_id)
+        assistant = await storage.assistants.get(assistant_id, owner_id)
         if assistant is None:
-            assistants = storage.assistants.list(owner_id)
+            assistants = await storage.assistants.list(owner_id)
             assistant = next(
                 (a for a in assistants if a.graph_id == assistant_id),
                 None,

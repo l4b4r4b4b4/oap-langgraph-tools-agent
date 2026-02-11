@@ -16,7 +16,11 @@
 | 06 | Robyn Runtime Server (LangGraph API parity) | 🟢 Complete | Critical | 2026-02-05 |
 | 07 | Bun + TypeScript Runtime (LangGraph JS) | ⚪ Not Started | High | 2026-01-30 |
 | 08 | CI/CD DevOps Workflow & Feature Parity | 🟡 In Progress | Critical | 2026-02-05 |
-| 10 | SSE Messages-Tuple Protocol Compatibility | 🟡 In Progress | Critical | 2026-02-20 |
+| 10 | SSE Messages-Tuple Protocol Compatibility | 🟢 Complete | Critical | 2026-02-20 |
+| 11 | Package Upgrade & `create_agent` Migration | 🟢 Complete | High | 2026-02-11 |
+| 12 | Postgres Persistence (Supabase) | 🟢 Complete | High | 2026-02-14 |
+| 13 | MCP Agent Integration | 🟢 Complete | Medium | 2026-02-14 |
+| 14 | Agent Persistence (Supabase/Postgres) | ⚪ Not Started | Medium | 2026-02-11 |
 
 ---
 
@@ -51,6 +55,10 @@
 - [07-Bun-TypeScript-Runtime](./07-Bun-TypeScript-Runtime/scratchpad.md)
 - [08-CI-CD-Feature-Parity](./08-CI-CD-Feature-Parity/scratchpad.md)
 - [10-SSE-Messages-Tuple-Protocol](./10-SSE-Messages-Tuple-Protocol/scratchpad.md)
+- [11-Create-Agent-Migration](./11-Create-Agent-Migration/scratchpad.md)
+- [12-Postgres-Persistence](./12-Postgres-Persistence/scratchpad.md)
+- [13-MCP-Agent-Integration](./13-MCP-Agent-Integration/scratchpad.md)
+- [14-Agent-Persistence](./14-Agent-Persistence/scratchpad.md)
 
 ---
 
@@ -64,6 +72,60 @@
 ---
 
 ## Recent Activity
+
+- 2026-02-14 (implementation session — Goals 12+13 Task-04):
+  - Goal 12 Task-04: **COMPLETE** — Postgres Integration Testing
+    - Created `test_database.py` (18 unit tests) — DB accessors, shutdown safety, config, in-memory fallback
+    - Created `test_postgres_integration.py` (34 integration tests) — schema, all 5 stores CRUD, cascades, full lifecycle
+    - Updated `conftest.py` — `@pytest.mark.postgres` marker, `postgres_pool`/`postgres_storage` fixtures, auto-skip when Postgres unavailable
+    - Discovered 3 pre-existing bugs in `postgres_storage.py`: BUG-PG-001 (cron thread_id None), BUG-PG-002 (cron update dict serialisation), BUG-PG-003 (thread delete doesn't cascade to runs)
+    - **Goal 12: 🟢 COMPLETE** — all 4 tasks done
+  - Goal 13 Task-04: **COMPLETE** — MCP + Persistence Testing
+    - 23 MCP tests (Task-03) + 18 DB unit + 34 Postgres integration = 75 new tests total
+    - **Goal 13: 🟢 COMPLETE** — all 4 tasks done
+    - 515/515 tests passing, ruff clean
+  - **Next**: Phase 2 — Goal 14 (Agent Persistence), then Goals 02+03 (LangSmith removal + Langfuse)
+
+- 2026-02-14 (implementation session — Goal 13 Task-03):
+  - Goal 13 Task-03: **COMPLETE** — MCP Server: Wire Agent Execution & Dynamic Tools
+    - Created `robyn_server/agent.py` (+364 lines) — `execute_agent_run()`, `get_agent_tool_info()`, config builder, response extractor
+    - Wired `tools/call` to real agent execution via `execute_agent_run()` (removed placeholder fallback)
+    - `tools/list` now dynamically built from assistant config (MCP sub-tools, RAG collections, model name)
+    - `PROTOCOL_VERSION` bumped `"2024-11-05"` → `"2025-03-26"` (handlers + schemas)
+    - Removed hardcoded `LANGGRAPH_AGENT_TOOL` global — replaced with `_get_dynamic_agent_tool()`
+    - 23 new tests: protocol version, dynamic tool listing, agent execution wiring, agent module functions
+    - 463/463 tests passing, ruff clean
+
+- 2026-02-14 (implementation session — Goal 13 Task-02):
+  - Goal 13 Task-02: **COMPLETE** — MCP Client: Adopt `langchain-mcp-adapters`
+    - Added `langchain-mcp-adapters>=0.2.1` dependency (`mcp` bumped 1.9.1 → 1.26.0)
+    - Replaced 55-line manual MCP connection block in `graph()` with ~15-line `MultiServerMCPClient` call
+    - Removed `create_langchain_mcp_tool()` and `wrap_mcp_authenticate_tool()` from `tools_agent/utils/tools.py`
+    - Created `tools_agent/utils/mcp_interceptors.py` — `handle_interaction_required` interceptor (code -32003 → clean `ToolException`)
+    - `MCPConfig` backward-compatible with OAP UI (unchanged schema)
+    - Relaxed `cfg.mcp_config.tools` requirement (load all tools if not specified, filter afterward)
+    - 440/440 tests passing, ruff clean
+
+- 2026-02-14 (research session — Goal 13 Task-01):
+  - Goal 13 Task-01: **COMPLETE** — MCP Agent Integration Research
+    - Evaluated `langchain-mcp-adapters` v0.2.1 (PyPI) — official LangChain MCP package, 28 releases, actively maintained
+    - **Decision: ADOPT `langchain-mcp-adapters`** — replaces ~200 lines of manual MCP client code with ~20 lines
+
+- 2026-02-14 (implementation session):
+  - Goal 12 Task-03: **COMPLETE** — Robyn Storage → Postgres (All 3 Phases)
+    - 440/440 tests passing, ruff clean
+
+- 2026-02-13 (implementation session):
+  - Goal 12 Task-03: Phase 1 partially completed — async migration of production code + 2 test files
+
+- 2026-02-12 (implementation session):
+  - Goal 12: **IN PROGRESS** — Postgres Persistence
+    - Tasks 01+02 ✅: DB module, checkpointer/store, RLS, live E2E with Ministral-3B
+
+- 2026-02-11 (implementation session):
+  - Goal 11: **COMPLETE** — Package Upgrade & `create_agent` Migration
+    - 440 tests passing, ruff clean, full SSE event sequence verified
+  - Goals 12, 13, 14: **CREATED** — Postgres Persistence, MCP Integration, Agent Persistence
 
 - 2026-02-20:
   - Goal 10: **CREATED** — SSE Messages-Tuple Protocol Compatibility

@@ -617,32 +617,35 @@ class TestA2AHandlerWithMockedStorage:
         """Create mock storage."""
         storage = MagicMock()
 
-        # Mock thread operations
+        # Mock thread operations (async methods)
         mock_thread = MagicMock()
         mock_thread.thread_id = "thread-123"
-        storage.threads.get.return_value = mock_thread
-        storage.threads.create.return_value = mock_thread
+        storage.threads.get = AsyncMock(return_value=mock_thread)
+        storage.threads.create = AsyncMock(return_value=mock_thread)
+        storage.threads.update = AsyncMock(return_value=mock_thread)
+        storage.threads.add_state_snapshot = AsyncMock(return_value=True)
 
-        # Mock assistant operations
+        # Mock assistant operations (async methods)
         mock_assistant = MagicMock()
         mock_assistant.assistant_id = "assistant-456"
         mock_assistant.graph_id = "agent"
-        storage.assistants.get.return_value = mock_assistant
-        storage.assistants.list.return_value = [mock_assistant]
+        storage.assistants.get = AsyncMock(return_value=mock_assistant)
+        storage.assistants.list = AsyncMock(return_value=[mock_assistant])
 
-        # Mock run operations
+        # Mock run operations (async methods)
         mock_run = MagicMock()
         mock_run.run_id = "run-789"
         mock_run.status = "success"
         mock_run.updated_at = datetime.now(timezone.utc)
-        storage.runs.create.return_value = mock_run
-        storage.runs.get_by_thread.return_value = mock_run
+        storage.runs.create = AsyncMock(return_value=mock_run)
+        storage.runs.get_by_thread = AsyncMock(return_value=mock_run)
+        storage.runs.update_status = AsyncMock(return_value=mock_run)
 
-        # Mock thread state
+        # Mock thread state (async methods)
         mock_state = MagicMock()
         mock_state.values = {"messages": [{"type": "ai", "content": "Hello!"}]}
-        storage.threads.get_state.return_value = mock_state
-        storage.threads.get_state_history.return_value = []
+        storage.threads.get_state = AsyncMock(return_value=mock_state)
+        storage.threads.get_state_history = AsyncMock(return_value=[])
 
         return storage
 
@@ -683,7 +686,7 @@ class TestA2AHandlerWithMockedStorage:
     @pytest.mark.asyncio
     async def test_handle_message_send_creates_thread(self, handler, mock_storage):
         """Test message/send creates thread if contextId not provided."""
-        mock_storage.threads.get.return_value = None  # Thread doesn't exist
+        mock_storage.threads.get = AsyncMock(return_value=None)  # Thread doesn't exist
 
         request = JsonRpcRequest(
             id="1",
@@ -735,7 +738,7 @@ class TestA2AHandlerWithMockedStorage:
     @pytest.mark.asyncio
     async def test_handle_tasks_get_not_found(self, handler, mock_storage):
         """Test tasks/get when run not found."""
-        mock_storage.runs.get_by_thread.return_value = None
+        mock_storage.runs.get_by_thread = AsyncMock(return_value=None)
 
         request = JsonRpcRequest(
             id="1",
@@ -774,13 +777,13 @@ class TestA2AStreamingHandler:
 
         mock_thread = MagicMock()
         mock_thread.thread_id = "thread-123"
-        storage.threads.get.return_value = mock_thread
-        storage.threads.create.return_value = mock_thread
+        storage.threads.get = AsyncMock(return_value=mock_thread)
+        storage.threads.create = AsyncMock(return_value=mock_thread)
 
         mock_assistant = MagicMock()
         mock_assistant.assistant_id = "assistant-456"
-        storage.assistants.get.return_value = mock_assistant
-        storage.assistants.list.return_value = [mock_assistant]
+        storage.assistants.get = AsyncMock(return_value=mock_assistant)
+        storage.assistants.list = AsyncMock(return_value=[mock_assistant])
 
         return storage
 

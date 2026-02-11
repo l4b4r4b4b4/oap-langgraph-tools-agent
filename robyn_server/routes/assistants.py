@@ -60,7 +60,9 @@ def register_assistant_routes(app: Robyn) -> None:
 
         # Check if assistant_id provided and if_exists handling
         if create_data.assistant_id:
-            existing = storage.assistants.get(create_data.assistant_id, user.identity)
+            existing = await storage.assistants.get(
+                create_data.assistant_id, user.identity
+            )
             if existing:
                 if create_data.if_exists == "do_nothing":
                     return json_response(existing)
@@ -84,7 +86,7 @@ def register_assistant_routes(app: Robyn) -> None:
             assistant_data["assistant_id"] = create_data.assistant_id
 
         try:
-            assistant = storage.assistants.create(assistant_data, user.identity)
+            assistant = await storage.assistants.create(assistant_data, user.identity)
             return json_response(assistant)
         except ValueError as e:
             return error_response(str(e), 422)
@@ -105,7 +107,7 @@ def register_assistant_routes(app: Robyn) -> None:
             return error_response("assistant_id is required", 422)
 
         storage = get_storage()
-        assistant = storage.assistants.get(assistant_id, user.identity)
+        assistant = await storage.assistants.get(assistant_id, user.identity)
 
         if assistant is None:
             return error_response(f"Assistant {assistant_id} not found", 404)
@@ -139,7 +141,7 @@ def register_assistant_routes(app: Robyn) -> None:
         storage = get_storage()
 
         # Check if assistant exists
-        existing = storage.assistants.get(assistant_id, user.identity)
+        existing = await storage.assistants.get(assistant_id, user.identity)
         if existing is None:
             return error_response(f"Assistant {assistant_id} not found", 404)
 
@@ -158,7 +160,9 @@ def register_assistant_routes(app: Robyn) -> None:
         if patch_data.description is not None:
             update_data["description"] = patch_data.description
 
-        assistant = storage.assistants.update(assistant_id, update_data, user.identity)
+        assistant = await storage.assistants.update(
+            assistant_id, update_data, user.identity
+        )
 
         if assistant is None:
             return error_response(f"Assistant {assistant_id} not found", 404)
@@ -181,7 +185,7 @@ def register_assistant_routes(app: Robyn) -> None:
             return error_response("assistant_id is required", 422)
 
         storage = get_storage()
-        deleted = storage.assistants.delete(assistant_id, user.identity)
+        deleted = await storage.assistants.delete(assistant_id, user.identity)
 
         if not deleted:
             return error_response(f"Assistant {assistant_id} not found", 404)
@@ -216,7 +220,7 @@ def register_assistant_routes(app: Robyn) -> None:
         storage = get_storage()
 
         # Get all assistants for this user
-        assistants = storage.assistants.list(user.identity)
+        assistants = await storage.assistants.list(user.identity)
 
         # Apply filters
         if search_data.graph_id:
@@ -269,7 +273,7 @@ def register_assistant_routes(app: Robyn) -> None:
         storage = get_storage()
 
         # Get all assistants for this user
-        assistants = storage.assistants.list(user.identity)
+        assistants = await storage.assistants.list(user.identity)
 
         # Apply filters
         if count_data.graph_id:

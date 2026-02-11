@@ -66,7 +66,7 @@ def register_thread_routes(app: Robyn) -> None:
 
         # Check if thread_id provided and if_exists handling
         if create_data.thread_id:
-            existing = storage.threads.get(create_data.thread_id, user.identity)
+            existing = await storage.threads.get(create_data.thread_id, user.identity)
             if existing:
                 if create_data.if_exists == "do_nothing":
                     return json_response(existing)
@@ -84,7 +84,7 @@ def register_thread_routes(app: Robyn) -> None:
         if create_data.thread_id:
             thread_data["thread_id"] = create_data.thread_id
 
-        thread = storage.threads.create(thread_data, user.identity)
+        thread = await storage.threads.create(thread_data, user.identity)
         return json_response(thread)
 
     @app.get("/threads/:thread_id")
@@ -103,7 +103,7 @@ def register_thread_routes(app: Robyn) -> None:
             return error_response("thread_id is required", 422)
 
         storage = get_storage()
-        thread = storage.threads.get(thread_id, user.identity)
+        thread = await storage.threads.get(thread_id, user.identity)
 
         if thread is None:
             return error_response(f"Thread {thread_id} not found", 404)
@@ -137,7 +137,7 @@ def register_thread_routes(app: Robyn) -> None:
         storage = get_storage()
 
         # Check if thread exists
-        existing = storage.threads.get(thread_id, user.identity)
+        existing = await storage.threads.get(thread_id, user.identity)
         if existing is None:
             return error_response(f"Thread {thread_id} not found", 404)
 
@@ -146,7 +146,7 @@ def register_thread_routes(app: Robyn) -> None:
         if patch_data.metadata is not None:
             update_data["metadata"] = patch_data.metadata
 
-        thread = storage.threads.update(thread_id, update_data, user.identity)
+        thread = await storage.threads.update(thread_id, update_data, user.identity)
 
         if thread is None:
             return error_response(f"Thread {thread_id} not found", 404)
@@ -169,7 +169,7 @@ def register_thread_routes(app: Robyn) -> None:
             return error_response("thread_id is required", 422)
 
         storage = get_storage()
-        deleted = storage.threads.delete(thread_id, user.identity)
+        deleted = await storage.threads.delete(thread_id, user.identity)
 
         if not deleted:
             return error_response(f"Thread {thread_id} not found", 404)
@@ -197,7 +197,7 @@ def register_thread_routes(app: Robyn) -> None:
             return error_response("thread_id is required", 422)
 
         storage = get_storage()
-        state = storage.threads.get_state(thread_id, user.identity)
+        state = await storage.threads.get_state(thread_id, user.identity)
 
         if state is None:
             return error_response(f"Thread {thread_id} not found", 404)
@@ -237,7 +237,9 @@ def register_thread_routes(app: Robyn) -> None:
             before = request.query_params.get("before", None)
 
         storage = get_storage()
-        history = storage.threads.get_history(thread_id, user.identity, limit, before)
+        history = await storage.threads.get_history(
+            thread_id, user.identity, limit, before
+        )
 
         if history is None:
             return error_response(f"Thread {thread_id} not found", 404)
@@ -271,7 +273,7 @@ def register_thread_routes(app: Robyn) -> None:
         storage = get_storage()
 
         # Get all threads for this user
-        threads = storage.threads.list(user.identity)
+        threads = await storage.threads.list(user.identity)
 
         # Apply filters
         if search_data.ids:
@@ -341,7 +343,7 @@ def register_thread_routes(app: Robyn) -> None:
         storage = get_storage()
 
         # Get all threads for this user
-        threads = storage.threads.list(user.identity)
+        threads = await storage.threads.list(user.identity)
 
         # Apply filters
         if count_data.status:
