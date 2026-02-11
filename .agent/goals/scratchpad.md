@@ -16,7 +16,7 @@
 | 06 | Robyn Runtime Server (LangGraph API parity) | 🟢 Complete | Critical | 2026-02-05 |
 | 07 | Bun + TypeScript Runtime (LangGraph JS) | ⚪ Not Started | High | 2026-01-30 |
 | 08 | CI/CD DevOps Workflow & Feature Parity | 🟡 In Progress | Critical | 2026-02-05 |
-| 10 | SSE Messages-Tuple Protocol Compatibility | 🟡 In Progress | Critical | 2026-02-20 |
+| 10 | SSE Messages-Tuple Protocol Compatibility | 🟢 Complete | Critical | 2026-02-20 |
 | 11 | Package Upgrade & `create_agent` Migration | 🟢 Complete | High | 2026-02-11 |
 | 12 | Postgres Persistence (Supabase) | 🟢 Complete | High | 2026-02-14 |
 | 13 | MCP Agent Integration | 🟢 Complete | Medium | 2026-02-14 |
@@ -105,89 +105,27 @@
     - `MCPConfig` backward-compatible with OAP UI (unchanged schema)
     - Relaxed `cfg.mcp_config.tools` requirement (load all tools if not specified, filter afterward)
     - 440/440 tests passing, ruff clean
-  - **Next**: Goal 13 Task-03 — MCP Server: wire `execute_agent_run`, dynamic tool listing
 
 - 2026-02-14 (research session — Goal 13 Task-01):
   - Goal 13 Task-01: **COMPLETE** — MCP Agent Integration Research
     - Evaluated `langchain-mcp-adapters` v0.2.1 (PyPI) — official LangChain MCP package, 28 releases, actively maintained
-    - Compatible with our deps: `langchain-core>=1.0.0,<2.0.0` ✅, `mcp>=1.9.2` (needs patch bump from 1.9.1) ⚠️
-    - Features: `MultiServerMCPClient` (multi-server, named servers), tool interceptors, stateful sessions, auth (headers + httpx.Auth), resources, prompts, progress notifications, elicitation, structured/multimodal content
     - **Decision: ADOPT `langchain-mcp-adapters`** — replaces ~200 lines of manual MCP client code with ~20 lines
-    - Assessed current MCP client: 6 confirmed problems (no connection reuse, single server, manual wrapping, no caching, silent errors, no health checks)
-    - Assessed current MCP server: 5 confirmed problems (agent execution not wired, no streaming, hardcoded single tool, manual JSON-RPC, outdated protocol version)
-    - Decision: Keep manual JSON-RPC server for now (lower risk), just wire `execute_agent_run`
-    - Refined task breakdown: Task-02 (adopt adapters), Task-03 (wire MCP server), Task-04 (testing)
-    - Updated Goal 13 scratchpad with comprehensive findings
-  - **Next**: Goal 13 Task-02 — MCP Client: adopt `langchain-mcp-adapters`, refactor `graph()`
 
 - 2026-02-14 (implementation session):
   - Goal 12 Task-03: **COMPLETE** — Robyn Storage → Postgres (All 3 Phases)
-    - Phase 1 ✅: ALL storage methods async, ALL route handlers + handlers await, ALL 7 test files converted
-    - Phase 1 ✅: 440/440 tests passing (was 230/440 — converted remaining 5 test files)
-    - Phase 1 ✅: Production bug fix — `streams.py` had missing `await` on final state store calls
-    - Phase 2 ✅: Created `robyn_server/postgres_storage.py` (~1636 lines) — 5 Postgres store classes + container
-    - Phase 2 ✅: Added DDL migration in `database.py` — `langgraph_server` schema + 6 tables + 2 indexes
-    - Phase 2 ✅: Wired `get_storage()` to return `PostgresStorage` when `is_postgres_enabled()`
-    - Phase 3 ✅: DDL migration verified against Supabase Postgres (6 tables, 8 indexes)
-    - Phase 3 ✅: Full E2E test — CRUD on all 5 stores (assistants, threads, runs, store, crons) against real Postgres
-    - Phase 3 ✅: `get_storage()` switch verified: `Storage` without Postgres, `PostgresStorage` with Postgres
     - 440/440 tests passing, ruff clean
-    - **Remaining**: Task-04 (Integration Testing), then Goals 13 + 14
-    - Branch: feat/goal-11-12-agent-migration-postgres-persistence (uncommitted, ready to commit)
 
 - 2026-02-13 (implementation session):
   - Goal 12 Task-03: Phase 1 partially completed — async migration of production code + 2 test files
 
 - 2026-02-12 (implementation session):
   - Goal 12: **IN PROGRESS** — Postgres Persistence
-    - Task-01 ✅: Created `robyn_server/database.py` — shared `AsyncConnectionPool`, fast-fail probe, checkpointer/store init
-    - Task-01 ✅: Added `DatabaseConfig` to `robyn_server/config.py` (DATABASE_URL + pool tuning env vars)
-    - Task-01 ✅: Wired `@app.startup_handler` / `@app.shutdown_handler` in `app.py`
-    - Task-01 ✅: Updated `/health` (persistence status) and `/info` (postgres capabilities)
-    - Task-01 ✅: Automatic RLS hardening on LangGraph tables at startup (blocks PostgREST, superuser bypasses)
-    - Task-02 ✅: Wired `checkpointer` + `store` into `create_agent()` in `tools_agent/agent.py`
-    - Task-02 ✅: Live E2E test with Ministral-3B: multi-turn memory ("Alice loves chess") + thread isolation
-    - Task-02 ✅: 6 checkpoints confirmed in Supabase Postgres, RLS verified, security advisors clean
-    - 440 tests passing, ruff clean
-    - **Remaining**: Task-03 (Robyn Storage → Postgres), Task-04 (Integration Testing)
-    - Branch: feat/goal-11-12-agent-migration-postgres-persistence
-
-- 2026-02-11 (implementation session, cont.):
-  - Goal 13: **CREATED** — MCP Agent Integration
-    - Improve MCP client: connection reuse, multi-server support, evaluate LangChain native MCP tools
-    - Complete MCP server: wire agent execution, SSE streaming, dynamic tool listing
-    - Depends on Goal 12 (Postgres Persistence)
-    - Tasks: 01-Research, 02-MCP-Client-Improvements, 03-MCP-Server-Completion, 04-Testing
-  - Goal 14: **CREATED** — Agent Persistence (Supabase/Postgres)
-    - Persist agent definitions (graph factory refs, default config, tool bindings, versioning)
-    - Agent registry in `langgraph_server` schema with version history
-    - API endpoints for agent CRUD + versioning
-    - Link assistants to agent definitions by ID + version
-    - Depends on Goal 12 (Postgres Persistence)
-    - Tasks: 01-Research-Design, 02-Database-Schema, 03-Agent-Registry, 04-API-Endpoints, 05-Assistant-Integration, 06-Testing
+    - Tasks 01+02 ✅: DB module, checkpointer/store, RLS, live E2E with Ministral-3B
 
 - 2026-02-11 (implementation session):
   - Goal 11: **COMPLETE** — Package Upgrade & `create_agent` Migration
-    - Task-01 ✅: Upgraded all packages (langgraph 1.0.8, langchain 1.2.10, langchain-core 1.2.11, langchain-openai 1.1.9, langchain-anthropic 1.3.3)
-    - Task-01 ✅: Added langgraph-checkpoint-postgres 3.0.4 + psycopg[binary,pool] 3.3.2
-    - Task-01 ✅: Removed langgraph-api==0.7.9 from runtime deps (no imports; dev dep covers it)
-    - Task-01 ✅: Fixed pytest config (non-root conftest, asyncio settings, testpaths)
-    - Task-02 ✅: Migrated create_react_agent → create_agent (import, prompt→system_prompt, removed config_schema)
-    - Task-03 ✅: Fixed streaming node name "agent" → "model" in streams.py, sse.py, test_streams.py
-    - Task-04 ✅: Live-tested E2E with Ministral-3B via vLLM + Supabase auth + Robyn SSE streaming
     - 440 tests passing, ruff clean, full SSE event sequence verified
-    - Branch: feat/goal-11-12-agent-migration-postgres-persistence
-  - Goal 12: **READY** — Postgres Persistence (Supabase) — all prerequisites met (Goal 11 complete)
-
-- 2026-02-11 (research session):
-  - Goal 11: **CREATED** — Package Upgrade & `create_agent` Migration
-  - Goal 12: **CREATED** — Postgres Persistence (Supabase)
-    - Connect LangGraph checkpointer + store to Supabase Postgres (direct connection)
-    - Replace in-memory Robyn runtime storage with Postgres-backed implementations
-    - `langgraph_server` schema for runtime tables (assistants, threads, runs, crons, store_items)
-    - `DATABASE_URL` env var config, in-memory fallback when not set
-    - Tasks: 01-Dependencies-DB-Module, 02-LangGraph-Checkpointer, 03-Robyn-Storage-Postgres, 04-Integration-Testing
-    - Depends on Goal 11 completion (now satisfied)
+  - Goals 12, 13, 14: **CREATED** — Postgres Persistence, MCP Integration, Agent Persistence
 
 - 2026-02-20:
   - Goal 10: **CREATED** — SSE Messages-Tuple Protocol Compatibility
