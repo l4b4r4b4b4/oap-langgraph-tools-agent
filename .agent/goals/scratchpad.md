@@ -19,6 +19,8 @@
 | 10 | SSE Messages-Tuple Protocol Compatibility | 🟡 In Progress | Critical | 2026-02-20 |
 | 11 | Package Upgrade & `create_agent` Migration | 🟢 Complete | High | 2026-02-11 |
 | 12 | Postgres Persistence (Supabase) | ⚪ Not Started | High | 2026-02-11 |
+| 13 | MCP Agent Integration | ⚪ Not Started | Medium | 2026-02-11 |
+| 14 | Agent Persistence (Supabase/Postgres) | ⚪ Not Started | Medium | 2026-02-11 |
 
 ---
 
@@ -55,6 +57,8 @@
 - [10-SSE-Messages-Tuple-Protocol](./10-SSE-Messages-Tuple-Protocol/scratchpad.md)
 - [11-Create-Agent-Migration](./11-Create-Agent-Migration/scratchpad.md)
 - [12-Postgres-Persistence](./12-Postgres-Persistence/scratchpad.md)
+- [13-MCP-Agent-Integration](./13-MCP-Agent-Integration/scratchpad.md)
+- [14-Agent-Persistence](./14-Agent-Persistence/scratchpad.md)
 
 ---
 
@@ -68,6 +72,20 @@
 ---
 
 ## Recent Activity
+
+- 2026-02-11 (implementation session, cont.):
+  - Goal 13: **CREATED** — MCP Agent Integration
+    - Improve MCP client: connection reuse, multi-server support, evaluate LangChain native MCP tools
+    - Complete MCP server: wire agent execution, SSE streaming, dynamic tool listing
+    - Depends on Goal 12 (Postgres Persistence)
+    - Tasks: 01-Research, 02-MCP-Client-Improvements, 03-MCP-Server-Completion, 04-Testing
+  - Goal 14: **CREATED** — Agent Persistence (Supabase/Postgres)
+    - Persist agent definitions (graph factory refs, default config, tool bindings, versioning)
+    - Agent registry in `langgraph_server` schema with version history
+    - API endpoints for agent CRUD + versioning
+    - Link assistants to agent definitions by ID + version
+    - Depends on Goal 12 (Postgres Persistence)
+    - Tasks: 01-Research-Design, 02-Database-Schema, 03-Agent-Registry, 04-API-Endpoints, 05-Assistant-Integration, 06-Testing
 
 - 2026-02-11 (implementation session):
   - Goal 11: **COMPLETE** — Package Upgrade & `create_agent` Migration
